@@ -1,5 +1,7 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query, orderBy, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+const FIREBASE_URLS = {
+  app: 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js',
+  firestore: 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js'
+};
 
 const firebaseConfig = {
   apiKey: "AIzaSyBNeZm3DunGcQnFnzeNe2fnSZHBM6mtVcU",
@@ -11,14 +13,17 @@ const firebaseConfig = {
   measurementId: "G-7E15N4CBNV"
 };
 
-const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp);
-const painelConfigRef = doc(db, 'painel_meta', 'app_state');
-const snapshotsCollectionRef = collection(db, 'painel_snapshots');
+let firebaseApi = null;
+let firebaseApp = null;
+let db = null;
+let painelConfigRef = null;
+let snapshotsCollectionRef = null;
+let firebaseDisponivel = false;
 let firebaseListenersIniciados = false;
 let firebaseInicializado = false;
 let firebaseConfigRecebida = false;
 let firebaseSnapshotsRecebidos = false;
+let resumoPeriodoAtual = 'diario';
 
 const STORAGE_KEYS = {
   adminLogged: 'sf_admin_logged',
@@ -252,52 +257,110 @@ function carregarStore(chave, fallback) {
   }
 }
 
+
 function salvarStore(chave, valor) {
   localStorage.setItem(chave, JSON.stringify(valor));
 }
 
-async function salvarConfigNoFirebase() {
+function persistirSnapshotsLocais() {
+  salvarStore(STORAGE_KEYS.importedSnapshots, snapshotsImportados);
+}
+
+function atualizarBasePorSnapshots(detalhe = '') {
+  registrosBase = snapshotsImportados.length
+    ? consolidarSnapshotsImportados()
+    : normalizarBaseCompleta(registrosSimulados, 'simulada');
+
+  aplicarBase(
+    registrosBase,
+    snapshotsImportados.length ? 'importada' : 'simulada',
+    detalhe || (
+      snapshotsImportados.length
+        ? `${registrosBase.length} registros consolidados de ${snapshotsImportados.length} planilha(s) importada(s).`
+        : 'Painel sem dados. Importe uma ou mais planilhas para carregar as rotinas.'
+    )
+  );
+
+  renderHistoricoPlanilhas();
+  atualizarResumoAdmin();
+  if (document.getElementById('adminModal') && !document.getElementById('adminPanelView')?.classList.contains('hidden')) {
+    popularControlesAdmin();
+  }
+}
+
+async function inicializarFirebaseOpcional() {
   try {
-    await setDoc(painelConfigRef, {
+    const [{ initializeApp }, firestoreApi] = await Promise.all([
+      import(FIREBASE_URLS.app),
+      import(FIREBASE_URLS.firestore)
+    ]);
+
+    firebaseApi = firestoreApi;
+    firebaseApp = initializeApp(firebaseConfig);
+    db = firestoreApi.getFirestore(firebaseApp);
+    painelConfigRef = firestoreApi.doc(db, 'painel_meta', 'app_state');
+    snapshotsCollectionRef = firestoreApi.collection(db, 'painel_snapshots');
+    firebaseDisponivel = true;
+    firebaseInicializado = true;
+    iniciarFirebaseSync();
+  } catch (error) {
+    firebaseDisponivel = false;
+    firebaseInicializado = true;
+    console.warn('Firebase indisponível. O painel seguirá funcionando com armazenamento local.', error);
+  }
+}
+
+async function salvarConfigNoFirebase() {
+  if (!firebaseDisponivel || !firebaseApi || !painelConfigRef) return false;
+  try {
+    await firebaseApi.setDoc(painelConfigRef, {
       appVersion: APP_STORAGE_VERSION,
       storeFormadorMap: sanitizarMapaFormadores(lojaFormadorMap),
       storePromotorMap: lojaPromotorMap,
       storeRenameMap: lojaRenameMap,
       updatedAt: new Date().toISOString()
     }, { merge: true });
+    return true;
   } catch (error) {
     console.error('Erro ao salvar configuração no Firebase:', error);
+    return false;
   }
 }
 
 async function salvarSnapshotNoFirebase(snapshot) {
+  if (!firebaseDisponivel || !firebaseApi || !db) return false;
   try {
-    await setDoc(doc(db, 'painel_snapshots', snapshot.id), snapshot, { merge: true });
+    await firebaseApi.setDoc(firebaseApi.doc(db, 'painel_snapshots', snapshot.id), snapshot, { merge: true });
+    return true;
   } catch (error) {
     console.error('Erro ao salvar snapshot no Firebase:', error);
-    throw error;
+    return false;
   }
 }
 
 async function excluirSnapshotNoFirebase(snapshotId) {
+  if (!firebaseDisponivel || !firebaseApi || !db) return false;
   try {
-    await deleteDoc(doc(db, 'painel_snapshots', snapshotId));
+    await firebaseApi.deleteDoc(firebaseApi.doc(db, 'painel_snapshots', snapshotId));
+    return true;
   } catch (error) {
     console.error('Erro ao excluir snapshot no Firebase:', error);
-    throw error;
+    return false;
   }
 }
 
 async function limparSnapshotsNoFirebase() {
-  const batch = writeBatch(db);
+  if (!firebaseDisponivel || !firebaseApi || !db) return false;
+  const batch = firebaseApi.writeBatch(db);
   snapshotsImportados.forEach((snapshot) => {
-    batch.delete(doc(db, 'painel_snapshots', snapshot.id));
+    batch.delete(firebaseApi.doc(db, 'painel_snapshots', snapshot.id));
   });
   try {
     await batch.commit();
+    return true;
   } catch (error) {
     console.error('Erro ao limpar snapshots no Firebase:', error);
-    throw error;
+    return false;
   }
 }
 
@@ -312,31 +375,14 @@ function normalizarSnapshotFirebase(snapshot) {
 }
 
 function aplicarEstadoRemoto() {
-  registrosBase = snapshotsImportados.length
-    ? consolidarSnapshotsImportados()
-    : normalizarBaseCompleta(registrosSimulados, 'simulada');
-
-  limparFiltros();
-  aplicarBase(
-    registrosBase,
-    snapshotsImportados.length ? 'importada' : 'simulada',
-    snapshotsImportados.length
-      ? `${registrosBase.length} registros consolidados de ${snapshotsImportados.length} planilha(s) importada(s).`
-      : 'Painel sem dados. Importe uma ou mais planilhas para carregar as rotinas.'
-  );
-
-  renderHistoricoPlanilhas();
-  atualizarResumoAdmin();
-  if (document.getElementById('adminModal') && !document.getElementById('adminPanelView')?.classList.contains('hidden')) {
-    popularControlesAdmin();
-  }
+  atualizarBasePorSnapshots();
 }
 
 function iniciarFirebaseSync() {
   if (firebaseListenersIniciados) return;
   firebaseListenersIniciados = true;
 
-  onSnapshot(painelConfigRef, (snapshot) => {
+  firebaseApi.onSnapshot(painelConfigRef, (snapshot) => {
     const remoto = snapshot.data() || {};
     lojaFormadorMap = sanitizarMapaFormadores({
       ...defaultLojaFormadorMap,
@@ -358,7 +404,7 @@ function iniciarFirebaseSync() {
     console.error('Erro ao sincronizar configurações do Firebase:', error);
   });
 
-  onSnapshot(query(snapshotsCollectionRef, orderBy('importedAt', 'desc')), (snapshot) => {
+  firebaseApi.onSnapshot(firebaseApi.query(snapshotsCollectionRef, firebaseApi.orderBy('importedAt', 'desc')), (snapshot) => {
     snapshotsImportados = snapshot.docs.map((item) => normalizarSnapshotFirebase({ id: item.id, ...item.data() }));
     salvarStore(STORAGE_KEYS.importedSnapshots, snapshotsImportados);
     firebaseSnapshotsRecebidos = true;
@@ -604,11 +650,42 @@ function atualizarKPIs(dados) {
   const previstas = dados.length;
   const realizadas = dados.filter((item) => item.status === 'realizada').length;
   const pendentes = dados.filter((item) => item.status === 'pendente').length;
+  const execucao = percentual(realizadas, previstas);
 
-  document.getElementById('kpiPrevistas').textContent = formatarNumero.format(previstas);
-  document.getElementById('kpiHoje').textContent = formatarNumero.format(realizadas);
-  document.getElementById('kpiExecucao').textContent = `${percentual(realizadas, previstas)}%`;
-  document.getElementById('kpiPendentes').textContent = formatarNumero.format(pendentes);
+  const kpiPrevistas = document.getElementById('kpiPrevistas');
+  const kpiHoje = document.getElementById('kpiHoje');
+  const kpiExecucao = document.getElementById('kpiExecucao');
+  const kpiPendentes = document.getElementById('kpiPendentes');
+  if (kpiPrevistas) kpiPrevistas.textContent = formatarNumero.format(previstas);
+  if (kpiHoje) kpiHoje.textContent = formatarNumero.format(realizadas);
+  if (kpiExecucao) kpiExecucao.textContent = `${execucao}%`;
+  if (kpiPendentes) kpiPendentes.textContent = formatarNumero.format(pendentes);
+
+  const executionRing = document.getElementById('executionRing');
+  if (executionRing) executionRing.style.setProperty('--progress', String(Math.max(0, Math.min(execucao, 100))));
+
+  const totalAnterior = registros.filter((item) => dataDentroDoPeriodo(item.data, ...obterPeriodoComparativo().split('|'))).length;
+  const realizadasAnterior = registros.filter((item) => item.status === 'realizada' && dataDentroDoPeriodo(item.data, ...obterPeriodoComparativo().split('|'))).length;
+  const execucaoAnterior = percentual(realizadasAnterior, totalAnterior);
+  const delta = execucao - execucaoAnterior;
+  const deltaEl = document.getElementById('execucaoDelta');
+  if (deltaEl) {
+    const sinal = delta > 0 ? '↑' : delta < 0 ? '↓' : '•';
+    const valor = delta === 0 ? '0%' : `${Math.abs(delta)}%`;
+    deltaEl.textContent = `${sinal}${valor}`;
+  }
+
+  const meta = 80;
+  const metaLabel = document.getElementById('metaPeriodoLabel');
+  const goalFill = document.getElementById('goalProgressFill');
+  const goalStatus = document.getElementById('goalStatusText');
+  const goalGap = document.getElementById('goalGapText');
+  if (metaLabel) metaLabel.textContent = `${meta}%`;
+  if (goalFill) goalFill.style.width = `${Math.max(0, Math.min(execucao, 100))}%`;
+  if (goalStatus) goalStatus.textContent = execucao >= meta ? 'Acima da meta' : 'Abaixo da meta';
+  if (goalGap) goalGap.textContent = execucao >= meta ? `+${execucao - meta}%` : `Faltam ${meta - execucao}%`;
+
+  atualizarPendenciasHero(dados);
 }
 
 function criarBarra(percent) {
@@ -877,6 +954,7 @@ function renderResumoLojas(dados) {
 
 function renderResumoPromotores(dados) {
   const tbody = document.getElementById('tabelaResumoPromotores');
+  if (!tbody) return;
   const agrupado = Object.values(dados.reduce((acc, item) => {
     const chave = item.promotor || item.loja;
     if (!acc[chave]) acc[chave] = { promotor: item.promotor || item.unidade || item.loja, formador: item.formador, lojas: new Set(), previstas: 0, realizadas: 0 };
@@ -1064,7 +1142,12 @@ function aplicarBase(base, origem = 'simulada', detalhe = '') {
   ultimaDataDisponivel = obterUltimaData(registros);
   popularFiltros();
   sincronizarFiltrosDependentes();
-  renderizarPainel();
+  atualizarRotulosAbas();
+  if (document.querySelector('.summary-tab.active')) {
+    aplicarPeriodoResumo(resumoPeriodoAtual);
+  } else {
+    renderizarPainel();
+  }
   atualizarResumoAdmin();
   popularControlesAdmin();
 
@@ -1248,7 +1331,10 @@ function decodeXml(xml) {
 
 function parseSharedStrings(xml) {
   if (!xml) return [];
-  return [...xml.matchAll(/<si[\s\S]*?<t[^>]*>([\s\S]*?)<\/t>[\s\S]*?<\/si>/g)].map((match) => decodeXml(match[1]));
+  return [...xml.matchAll(/<si[\s\S]*?<\/si>/g)].map((item) => {
+    const partes = [...item[0].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((parte) => decodeXml(parte[1]));
+    return partes.join('');
+  });
 }
 
 function columnToIndex(col) {
@@ -1291,7 +1377,11 @@ async function parseXlsx(file) {
   const sharedStrings = parseSharedStrings(entries['xl/sharedStrings.xml']);
   if (!workbookXml || !relsXml) throw new Error('Workbook XLSX inválido.');
 
-  const rels = Object.fromEntries([...relsXml.matchAll(/<Relationship[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)].map((match) => [match[1], `xl/${match[2].replace(/^\.\//, '')}`]));
+  const rels = Object.fromEntries([...relsXml.matchAll(/<Relationship[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)].map((match) => {
+    const target = match[2].replace(/^\.\//, '').replace(/^\//, '');
+    const normalizado = target.startsWith('xl/') ? target : `xl/${target.replace(/^\.\.\//, '')}`;
+    return [match[1], normalizado];
+  }));
   const sheets = {};
   [...workbookXml.matchAll(/<sheet[^>]*name="([^"]+)"[^>]*r:id="([^"]+)"/g)].forEach((match) => {
     const nome = decodeXml(match[1]);
@@ -1301,44 +1391,218 @@ async function parseXlsx(file) {
   return sheets;
 }
 
-async function importarArquivo() {
-  const arquivo = fileInput.files[0];
-  if (!arquivo) {
-    setImportStatus('Selecione um arquivo .xlsx, .xlsm ou .csv para importar.');
+let previewsImportacao = [];
+
+function obterNomeAbaRotinas(sheets = {}) {
+  return Object.keys(sheets).find((nome) => slug(nome).includes('rotina')) || Object.keys(sheets)[0] || '';
+}
+
+function gerarLinhasPreview(linhas = [], limite = 6) {
+  const limpas = (linhas || []).filter((linha) => Array.isArray(linha) && linha.some((coluna) => String(coluna || '').trim()));
+  if (!limpas.length) return { cabecalho: [], linhas: [] };
+  const cabecalho = limpas[0].slice(0, 6).map((item) => String(item || '').trim());
+  const preview = limpas.slice(1, limite + 1).map((linha) => linha.slice(0, 6).map((item) => String(item ?? '').trim()));
+  return { cabecalho, linhas: preview };
+}
+
+function renderizarPreviewImportacao() {
+  const container = document.getElementById('importPreviewList');
+  const resumo = document.getElementById('selectedFilesSummary');
+  if (!container || !resumo) return;
+
+  if (!previewsImportacao.length) {
+    resumo.textContent = 'Nenhuma planilha selecionada.';
+    container.innerHTML = '<div class="empty-state">Selecione uma ou mais planilhas para visualizar a prévia antes de importar.</div>';
     return;
   }
 
-  try {
-    setImportStatus(`Processando ${arquivo.name}...`, 'Importando...');
-    let sheets;
-    if (/\.csv$/i.test(arquivo.name)) sheets = parseCsv(await arquivo.text());
-    else sheets = await parseXlsx(arquivo);
+  const arquivosValidos = previewsImportacao.filter((item) => !item.error);
+  resumo.textContent = `${previewsImportacao.length} arquivo(s) selecionado(s) • ${arquivosValidos.length} pronto(s) para importação.`;
 
-    const baseImportada = normalizarRegistrosImportados(sheets);
-    const snapshot = {
-      id: `snap-${Date.now()}`,
-      fileName: arquivo.name,
-      importedAt: new Date().toISOString(),
-      total: baseImportada.length,
-      latestDate: obterUltimaData(baseImportada),
-      data: baseImportada
-    };
-    await salvarSnapshotNoFirebase(snapshot);
-    fileInput.value = '';
-    setImportStatus(`${baseImportada.length} registros importados de ${arquivo.name}. A sincronização online foi iniciada.`, 'Importado');
-  } catch (error) {
-    console.error(error);
-    setImportStatus(error.message || 'Não foi possível importar o arquivo.', 'Falha na importação');
+  container.innerHTML = previewsImportacao.map((item) => {
+    if (item.error) {
+      return `<div class="preview-card preview-card-error"><div class="preview-card-head"><strong>${escaparHtml(item.fileName)}</strong><span class="status-tag">Falha na leitura</span></div><div class="admin-feedback">${escaparHtml(item.error)}</div></div>`;
+    }
+
+    const head = item.preview.cabecalho.length
+      ? `<thead><tr>${item.preview.cabecalho.map((coluna) => `<th>${escaparHtml(coluna || 'Coluna')}</th>`).join('')}</tr></thead>`
+      : '';
+    const body = item.preview.linhas.length
+      ? `<tbody>${item.preview.linhas.map((linha) => `<tr>${linha.map((coluna) => `<td>${escaparHtml(coluna)}</td>`).join('')}</tr>`).join('')}</tbody>`
+      : '<tbody><tr><td colspan="6">Sem linhas para pré-visualizar.</td></tr></tbody>';
+
+    return `<div class="preview-card">
+      <div class="preview-card-head">
+        <div>
+          <strong>${escaparHtml(item.fileName)}</strong>
+          <div class="preview-meta">${item.total} registro(s) reconhecido(s) • aba ${escaparHtml(item.sheetName || 'principal')} • última data ${escaparHtml(item.latestDate || '--')}</div>
+        </div>
+        <span class="status-tag">Pronta</span>
+      </div>
+      <div class="table-shell preview-table-shell">
+        <table>${head}${body}</table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function montarPreviewArquivos() {
+  const arquivos = Array.from(fileInput?.files || []);
+  previewsImportacao = [];
+  renderizarPreviewImportacao();
+
+  if (!arquivos.length) {
+    setImportStatus('Selecione uma ou mais planilhas para visualizar a prévia e depois importar.', 'Sem arquivo');
+    return;
+  }
+
+  setImportStatus(
+    arquivos.length === 1 ? `Lendo ${arquivos[0].name} para pré-visualização...` : `Lendo ${arquivos.length} planilhas para pré-visualização...`,
+    'Preparando prévia'
+  );
+
+  for (const arquivo of arquivos) {
+    try {
+      const sheets = /\.csv$/i.test(arquivo.name) ? parseCsv(await arquivo.text()) : await parseXlsx(arquivo);
+      const baseImportada = normalizarRegistrosImportados(sheets);
+      const sheetName = obterNomeAbaRotinas(sheets);
+      const preview = gerarLinhasPreview(sheets[sheetName] || Object.values(sheets)[0] || []);
+      previewsImportacao.push({
+        fileName: arquivo.name,
+        sheets,
+        baseImportada,
+        total: baseImportada.length,
+        latestDate: obterUltimaData(baseImportada),
+        sheetName,
+        preview
+      });
+    } catch (error) {
+      previewsImportacao.push({
+        fileName: arquivo.name,
+        error: error?.message || 'Não foi possível ler a planilha selecionada.'
+      });
+    }
+  }
+
+  renderizarPreviewImportacao();
+
+  const validos = previewsImportacao.filter((item) => !item.error).length;
+  if (validos) {
+    setImportStatus(
+      validos === 1
+        ? 'Pré-visualização pronta. Revise os dados e clique em “Importar agora”.'
+        : `Pré-visualização pronta para ${validos} planilha(s). Revise os dados e clique em “Importar agora”.`,
+      'Prévia pronta'
+    );
+  } else {
+    setImportStatus('Nenhuma das planilhas selecionadas pôde ser lida. Revise o arquivo e tente novamente.', 'Falha na prévia');
   }
 }
 
-function resetarParaSimulada() {
-  limparSnapshotsNoFirebase().then(() => {
-    if (fileInput) fileInput.value = '';
-    setImportStatus('Painel limpo com sucesso. A atualização foi enviada para todos os usuários.', 'Painel zerado');
-  }).catch(() => {
-    setImportStatus('Não foi possível limpar o painel no Firebase.', 'Falha');
-  });
+
+async function importarArquivo() {
+  const arquivos = Array.from(fileInput?.files || []);
+  if (!arquivos.length) {
+    setImportStatus('Selecione pelo menos um arquivo .xlsx, .xlsm ou .csv para importar.');
+    return;
+  }
+
+  if (!previewsImportacao.length) {
+    await montarPreviewArquivos();
+  }
+
+  const previewsValidas = previewsImportacao.filter((item) => !item.error && Array.isArray(item.baseImportada));
+  if (!previewsValidas.length) {
+    setImportStatus('Nenhuma planilha válida ficou pronta para importação. Corrija os arquivos e tente novamente.', 'Falha na importação');
+    return;
+  }
+
+  let totalRegistros = 0;
+  let arquivosImportados = 0;
+  let sincronizados = 0;
+  const erros = previewsImportacao.filter((item) => item.error).map((item) => `${item.fileName}: ${item.error}`);
+
+  setImportStatus(
+    previewsValidas.length === 1
+      ? `Importando ${previewsValidas[0].fileName}...`
+      : `Importando ${previewsValidas.length} planilha(s)...`,
+    'Importando...'
+  );
+
+  for (let index = 0; index < previewsValidas.length; index += 1) {
+    const item = previewsValidas[index];
+    const snapshot = {
+      id: `snap-${Date.now()}-${index}-${item.fileName.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+      fileName: item.fileName,
+      importedAt: new Date().toISOString(),
+      total: item.baseImportada.length,
+      latestDate: obterUltimaData(item.baseImportada),
+      data: item.baseImportada
+    };
+
+    snapshotsImportados.push(snapshot);
+    totalRegistros += item.baseImportada.length;
+    arquivosImportados += 1;
+
+    const synced = await salvarSnapshotNoFirebase(snapshot);
+    if (synced) sincronizados += 1;
+  }
+
+  persistirSnapshotsLocais();
+  atualizarBasePorSnapshots(
+    arquivosImportados === 1
+      ? `${totalRegistros} registros importados com sucesso. A planilha já está alimentando o painel.`
+      : `${totalRegistros} registros importados com sucesso em ${arquivosImportados} planilha(s). Todas já estão alimentando o painel.`
+  );
+
+  if (fileInput) fileInput.value = '';
+  previewsImportacao = [];
+  renderizarPreviewImportacao();
+
+  if (sincronizados === arquivosImportados && !erros.length) {
+    setImportStatus(
+      arquivosImportados === 1
+        ? `${totalRegistros} registros importados com sucesso. A planilha foi anexada e sincronizada.`
+        : `${totalRegistros} registros importados com sucesso em ${arquivosImportados} planilha(s). Todas foram anexadas e sincronizadas.`,
+      'Importado'
+    );
+    return;
+  }
+
+  if (sincronizados < arquivosImportados) {
+    setImportStatus(
+      `${totalRegistros} registros importados com sucesso no painel. ${sincronizados} de ${arquivosImportados} planilha(s) sincronizadas online.${erros.length ? ` Falhas de leitura: ${erros.join(' | ')}` : ''}`,
+      sincronizados ? 'Importado parcialmente' : 'Importado localmente'
+    );
+    return;
+  }
+
+  if (erros.length) {
+    setImportStatus(
+      `${arquivosImportados} planilha(s) importada(s) com sucesso e ${erros.length} com falha. ${erros.join(' | ')}`,
+      'Importação parcial'
+    );
+  }
+}
+
+async function resetarParaSimulada() {
+  const totalAnterior = snapshotsImportados.length;
+  snapshotsImportados = [];
+  persistirSnapshotsLocais();
+  if (fileInput) fileInput.value = '';
+  previewsImportacao = [];
+  renderizarPreviewImportacao();
+  atualizarBasePorSnapshots('Painel limpo com sucesso.');
+
+  const remotoLimpo = await limparSnapshotsNoFirebase();
+  setImportStatus(
+    remotoLimpo
+      ? 'Painel limpo com sucesso. A atualização foi enviada para todos os usuários.'
+      : totalAnterior
+        ? 'Painel limpo com sucesso neste dispositivo. A sincronização online não pôde ser concluída agora.'
+        : 'Painel já estava limpo.',
+    'Painel zerado'
+  );
 }
 
 function aplicarRegrasAdministrativasNaBaseAtual() {
@@ -1356,7 +1620,7 @@ function atualizarResumoAdmin() {
   const lojas = new Set(registros.map((item) => item.loja)).size;
   const formadores = new Set(registros.map((item) => item.formador)).size;
   const origem = snapshotsImportados.length ? `${snapshotsImportados.length} planilha(s) importada(s)` : 'painel zerado';
-  adminSummary.textContent = `${formatarNumero.format(registros.length)} registros ativos • ${lojas} lojas • ${formadores} formadores • origem: ${origem}.`;
+  if (adminSummary) adminSummary.textContent = `${formatarNumero.format(registros.length)} registros ativos • ${lojas} lojas • ${formadores} formadores • origem: ${origem}.`;
 }
 
 function popularControlesAdmin() {
@@ -1462,19 +1726,40 @@ function salvarNovoNomeLoja() {
   feedback.textContent = `Nome alterado para ${novoNome}.`;
 }
 
-function usarSnapshot(snapshotId) {
+async function usarSnapshot(snapshotId) {
   const snapshot = snapshotsImportados.find((item) => item.id === snapshotId);
   if (!snapshot) return;
   const atualizado = { ...snapshot, data: normalizarBaseCompleta(snapshot.data, 'importada') };
-  salvarSnapshotNoFirebase(atualizado)
-    .then(() => setImportStatus(`Planilha ${snapshot.fileName} reprocessada e sincronizada.`, 'Sincronizado'))
-    .catch(() => setImportStatus('Não foi possível reprocessar a planilha no Firebase.', 'Falha'));
+  snapshotsImportados = snapshotsImportados.map((item) => item.id === snapshotId ? atualizado : item);
+  persistirSnapshotsLocais();
+  atualizarBasePorSnapshots(`Planilha ${snapshot.fileName} reprocessada e aplicada no painel.`);
+  const sincronizado = await salvarSnapshotNoFirebase(atualizado);
+  setImportStatus(
+    sincronizado
+      ? `Planilha ${snapshot.fileName} reprocessada e sincronizada.`
+      : `Planilha ${snapshot.fileName} reprocessada no painel, mas a sincronização online falhou.`,
+    sincronizado ? 'Sincronizado' : 'Reprocessada localmente'
+  );
 }
 
-function excluirSnapshot(snapshotId) {
-  excluirSnapshotNoFirebase(snapshotId)
-    .then(() => setImportStatus('Planilha removida com sucesso. Todos os usuários verão a atualização.', 'Removida'))
-    .catch(() => setImportStatus('Não foi possível remover a planilha no Firebase.', 'Falha'));
+async function excluirSnapshot(snapshotId) {
+  const snapshot = snapshotsImportados.find((item) => item.id === snapshotId);
+  if (!snapshot) return;
+  snapshotsImportados = snapshotsImportados.filter((item) => item.id !== snapshotId);
+  persistirSnapshotsLocais();
+  atualizarBasePorSnapshots(
+    snapshotsImportados.length
+      ? `Planilha ${snapshot.fileName} removida. O painel foi recalculado com as demais importações.`
+      : 'Planilha removida. O painel ficou sem dados importados.'
+  );
+
+  const sincronizado = await excluirSnapshotNoFirebase(snapshotId);
+  setImportStatus(
+    sincronizado
+      ? 'Planilha removida com sucesso. Todos os usuários verão a atualização.'
+      : 'Planilha removida neste dispositivo, mas a sincronização online falhou.',
+    sincronizado ? 'Removida' : 'Removida localmente'
+  );
 }
 
 function configurarAdmin() {
@@ -1494,17 +1779,16 @@ function configurarAdmin() {
     }
   }
 
-  document.getElementById('adminToggle').addEventListener('click', () => {
-    modal.classList.remove('hidden');
-    modal.setAttribute('aria-hidden', 'false');
+  const abrirModal = () => {
+    window.PainelSF.abrirAdminModal();
     refreshAdminView();
-  });
+  };
 
-  function fecharModal() {
-    modal.classList.add('hidden');
-    modal.setAttribute('aria-hidden', 'true');
-  }
+  const fecharModal = () => {
+    window.PainelSF.fecharAdminModal();
+  };
 
+  document.getElementById('adminToggle').addEventListener('click', abrirModal);
   document.getElementById('closeAdmin').addEventListener('click', fecharModal);
   document.getElementById('adminOverlay').addEventListener('click', fecharModal);
 
@@ -1548,43 +1832,133 @@ function configurarAdmin() {
   refreshAdminView();
 }
 
-function configurarAbasResumo() {
-  return;
+function obterPeriodoComparativo() {
+  const periodo = normalizarPeriodo(filtros.dataInicial.value, filtros.dataFinal.value);
+  if (!periodo.dataInicial || !periodo.dataFinal) return '|';
+  const inicio = new Date(`${periodo.dataInicial}T00:00:00`);
+  const fim = new Date(`${periodo.dataFinal}T00:00:00`);
+  const diffDias = Math.max(1, Math.round((fim - inicio) / 86400000) + 1);
+  const novoFim = new Date(inicio);
+  novoFim.setDate(novoFim.getDate() - 1);
+  const novoInicio = new Date(novoFim);
+  novoInicio.setDate(novoInicio.getDate() - (diffDias - 1));
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return `${fmt(novoInicio)}|${fmt(novoFim)}`;
 }
 
-function configurarSidebar() {
-  const body = document.body;
-  const toggle = document.getElementById('sidebarToggle');
-  const close = document.getElementById('closeSidebar');
-  const overlay = document.getElementById('sidebarOverlay');
+function atualizarPendenciasHero(dados) {
+  const container = document.getElementById('painelPendencias');
+  if (!container) return;
+  const pendentes = dados.filter((item) => item.status === 'pendente');
+  const lojasBaixasMap = {};
+  dados.forEach((item) => {
+    if (!lojasBaixasMap[item.loja]) lojasBaixasMap[item.loja] = { total: 0, realizadas: 0 };
+    lojasBaixasMap[item.loja].total += 1;
+    if (item.status === 'realizada') lojasBaixasMap[item.loja].realizadas += 1;
+  });
+  const lojasBaixas = Object.values(lojasBaixasMap).filter((item) => percentual(item.realizadas, item.total) < 50).length;
+  const promotoresSemRegistro = Object.values(dados.reduce((acc, item) => {
+    const chave = item.formador || 'Sem formador';
+    if (!acc[chave]) acc[chave] = { total: 0 };
+    acc[chave].total += 1;
+    return acc;
+  }, {})).filter((item) => item.total === 0).length;
+  const pendenciasAntigas = pendentes.length;
+  const itens = [
+    { texto: `${lojasBaixas} lojas com execução abaixo de 50%` },
+    { texto: `${promotoresSemRegistro} promotores sem registro no período` },
+    { texto: `${pendenciasAntigas} rotinas pendentes no recorte atual` }
+  ];
+  container.innerHTML = itens.map((item) => `<div class="hero-alert-item"><span class="hero-alert-bullet">⚠️</span><span><strong>${item.texto}</strong></span></div>`).join('');
+}
 
-  function alternarSidebar(forceOpen) {
-    const abrir = typeof forceOpen === 'boolean' ? forceOpen : !body.classList.contains('sidebar-open');
-    body.classList.toggle('sidebar-open', abrir);
+function atualizarRotulosAbas() {
+  const ref = ultimaDataDisponivel || new Date().toISOString().slice(0,10);
+  const [y,m,d] = ref.split('-').map(Number);
+  const dataRef = new Date(y, m-1, d);
+  const fmtLonga = dataRef.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' });
+  const diario = document.getElementById('tabLabelDiario');
+  const semanal = document.getElementById('tabLabelSemanal');
+  const mensal = document.getElementById('tabLabelMensal');
+  if (diario) diario.textContent = `Hoje • ${fmtLonga}`;
+  const fimSemana = new Date(dataRef); const inicioSemana = new Date(dataRef); inicioSemana.setDate(dataRef.getDate()-6);
+  if (semanal) semanal.textContent = `${inicioSemana.toLocaleDateString('pt-BR',{day:'numeric',month:'short'})} a ${fimSemana.toLocaleDateString('pt-BR',{day:'numeric',month:'short'})}`;
+  if (mensal) mensal.textContent = dataRef.toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
+}
+
+function aplicarPeriodoResumo(periodo) {
+  resumoPeriodoAtual = periodo;
+  const ref = ultimaDataDisponivel || new Date().toISOString().slice(0,10);
+  const base = new Date(`${ref}T00:00:00`);
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  if (periodo === 'diario') {
+    filtros.dataInicial.value = ref;
+    filtros.dataFinal.value = ref;
+  } else if (periodo === 'semanal') {
+    const ini = new Date(base); ini.setDate(base.getDate()-6);
+    filtros.dataInicial.value = fmt(ini);
+    filtros.dataFinal.value = ref;
+  } else {
+    const ini = new Date(base.getFullYear(), base.getMonth(), 1);
+    filtros.dataInicial.value = fmt(ini);
+    filtros.dataFinal.value = ref;
   }
+  document.querySelectorAll('.summary-tab').forEach((button) => button.classList.toggle('active', button.dataset.period === periodo));
+  renderizarPainel();
+}
 
-  if (toggle) toggle.addEventListener('click', () => alternarSidebar());
-  if (close) close.addEventListener('click', () => alternarSidebar(false));
-  if (overlay) overlay.addEventListener('click', () => alternarSidebar(false));
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') alternarSidebar(false);
+function configurarAbasResumo() {
+  atualizarRotulosAbas();
+  document.querySelectorAll('.summary-tab').forEach((button) => {
+    button.addEventListener('click', () => aplicarPeriodoResumo(button.dataset.period));
   });
 }
 
+function configurarSidebar() {
+  const close = document.getElementById('closeSidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+
+  if (close) close.addEventListener('click', () => window.PainelSF.alternarSidebar(false));
+  if (overlay) overlay.addEventListener('click', () => window.PainelSF.alternarSidebar(false));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') window.PainelSF.alternarSidebar(false);
+  });
+}
+
+function ativarResumoMensalSemSobrescreverDatas() {
+  resumoPeriodoAtual = 'mensal';
+  document.querySelectorAll('.summary-tab').forEach((button) => {
+    button.classList.toggle('active', button.dataset.period === 'mensal');
+  });
+}
+
+function aplicarFiltroComResumoMensal({ preservarDatas = false, sincronizarDependentes = false } = {}) {
+  if (sincronizarDependentes) sincronizarFiltrosDependentes();
+  if (preservarDatas) {
+    ativarResumoMensalSemSobrescreverDatas();
+    renderizarPainel();
+  } else {
+    aplicarPeriodoResumo('mensal');
+  }
+}
+
 function configurarEventos() {
-  filtros.rede.addEventListener('change', sincronizarFiltrosDependentes);
-  filtros.formador.addEventListener('change', sincronizarFiltrosDependentes);
-  filtros.rotina.addEventListener('change', renderizarPainel);
-  filtros.dataInicial.addEventListener('change', renderizarPainel);
-  filtros.dataFinal.addEventListener('change', renderizarPainel);
-  document.getElementById('applyFilters').addEventListener('click', () => { renderizarPainel(); document.body.classList.remove('sidebar-open'); });
+  filtros.rede.addEventListener('change', () => aplicarFiltroComResumoMensal({ sincronizarDependentes: true }));
+  filtros.formador.addEventListener('change', () => aplicarFiltroComResumoMensal({ sincronizarDependentes: true }));
+  filtros.loja.addEventListener('change', () => aplicarFiltroComResumoMensal());
+  filtros.status.addEventListener('change', () => aplicarFiltroComResumoMensal());
+  filtros.rotina.addEventListener('change', () => aplicarFiltroComResumoMensal());
+  filtros.dataInicial.addEventListener('change', () => aplicarFiltroComResumoMensal({ preservarDatas: true }));
+  filtros.dataFinal.addEventListener('change', () => aplicarFiltroComResumoMensal({ preservarDatas: true }));
+  document.getElementById('applyFilters').addEventListener('click', () => { aplicarFiltroComResumoMensal({ preservarDatas: Boolean(filtros.dataInicial.value || filtros.dataFinal.value), sincronizarDependentes: true }); document.body.classList.remove('sidebar-open'); });
   document.getElementById('clearFilters').addEventListener('click', () => { limparFiltros(); document.body.classList.remove('sidebar-open'); });
-  document.getElementById('importFile').addEventListener('click', importarArquivo);
-  document.getElementById('resetData').addEventListener('click', resetarParaSimulada);
+  const importButton = document.getElementById('importFile');
+  const resetButton = document.getElementById('resetData');
+  if (importButton) importButton.addEventListener('click', importarArquivo);
+  if (resetButton) resetButton.addEventListener('click', resetarParaSimulada);
   if (fileInput) {
     fileInput.addEventListener('change', () => {
-      const nome = fileInput.files[0]?.name;
-      if (nome) setImportStatus(`Arquivo selecionado: ${nome}. Clique em “Importar agora” para atualizar o painel.`, 'Arquivo pronto');
+      montarPreviewArquivos();
     });
   }
 }
@@ -1600,10 +1974,49 @@ function inicializarBaseAtiva() {
   renderHistoricoPlanilhas();
 }
 
-configurarSidebar();
-configurarEventos();
-configurarAdmin();
-configurarAbasResumo();
-inicializarBaseAtiva();
-firebaseInicializado = true;
-iniciarFirebaseSync();
+
+window.PainelSF = Object.assign(window.PainelSF || {}, {
+  alternarSidebar(forceOpen) {
+    const body = document.body;
+    const abrir = typeof forceOpen === 'boolean' ? forceOpen : !body.classList.contains('sidebar-open');
+    body.classList.toggle('sidebar-open', abrir);
+  },
+  abrirAdminModal() {
+    const modal = document.getElementById('adminModal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+  },
+  fecharAdminModal() {
+    const modal = document.getElementById('adminModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+  },
+  aplicarPeriodoResumo,
+  aplicarFiltrosRapido() {
+    try { renderizarPainel(); } catch (error) { console.error(error); }
+    document.body.classList.remove('sidebar-open');
+  },
+  limparFiltrosRapido() {
+    try { limparFiltros(); } catch (error) { console.error(error); }
+    document.body.classList.remove('sidebar-open');
+  }
+});
+
+function inicializarAplicacao() {
+  if (window.__sfPainelInicializado) return;
+  window.__sfPainelInicializado = true;
+  configurarSidebar();
+  configurarEventos();
+  configurarAdmin();
+  configurarAbasResumo();
+  inicializarBaseAtiva();
+  inicializarFirebaseOpcional();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', inicializarAplicacao);
+} else {
+  inicializarAplicacao();
+}

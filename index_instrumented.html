@@ -8,6 +8,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
+<script>
+window.addEventListener("error", function(e){
+  document.body.insertAdjacentHTML('afterbegin', '<pre id="errbox">ERR:'+String(e.message).replace(/</g,'&lt;')+' at '+(e.filename||'')+':'+(e.lineno||'')+'</pre>');
+});
+window.addEventListener('unhandledrejection', function(e){
+  document.body.insertAdjacentHTML('afterbegin', '<pre id="rejbox">REJ:'+String((e.reason&&e.reason.message)||e.reason).replace(/</g,'&lt;')+'</pre>');
+});
+</script>
 </head>
 <body>
   <div class="app-shell">
@@ -22,11 +30,11 @@
       </div>
 
       <div class="topbar-actions topbar-actions-model">
-        <button id="sidebarToggle" class="btn btn-filters model-icon-btn" type="button" aria-label="Abrir filtros" onclick="window.PainelSF && window.PainelSF.alternarSidebar()">
+        <button id="sidebarToggle" class="btn btn-filters model-icon-btn" type="button" aria-label="Abrir filtros">
           <span class="btn-icon">☰</span>
           <span>Filtros</span>
         </button>
-        <button id="adminToggle" class="btn btn-admin model-lock-btn" type="button" aria-label="Abrir área administrativa" onclick="window.PainelSF && window.PainelSF.abrirAdminModal()">
+        <button id="adminToggle" class="btn btn-admin model-lock-btn" type="button" aria-label="Abrir área administrativa">
           <span class="lock-icon">🔒</span>
         </button>
       </div>
@@ -42,7 +50,7 @@
               <span class="eyebrow">Filtros</span>
               <h2>Refine a visualização</h2>
             </div>
-            <button id="closeSidebar" class="icon-btn" type="button" aria-label="Fechar filtros" onclick="window.PainelSF && window.PainelSF.alternarSidebar(false)">×</button>
+            <button id="closeSidebar" class="icon-btn" type="button" aria-label="Fechar filtros">×</button>
           </div>
 
           <div class="sidebar-helper-card">
@@ -91,8 +99,8 @@
             </label>
 
             <div class="actions-row sidebar-actions-row field-full">
-              <button id="applyFilters" class="btn btn-primary" type="button" onclick="window.PainelSF && window.PainelSF.aplicarFiltrosRapido()">Aplicar filtros</button>
-              <button id="clearFilters" class="btn btn-secondary" type="button" onclick="window.PainelSF && window.PainelSF.limparFiltrosRapido()">Limpar filtros</button>
+              <button id="applyFilters" class="btn btn-primary" type="button">Aplicar filtros</button>
+              <button id="clearFilters" class="btn btn-secondary" type="button">Limpar filtros</button>
             </div>
           </div>
         </section>
@@ -103,21 +111,21 @@
       
       <section class="summary-tabs-shell">
         <div class="summary-tabs">
-          <button class="summary-tab active" data-period="diario" type="button" onclick="window.PainelSF && window.PainelSF.aplicarPeriodoResumo('diario')">
+          <button class="summary-tab active" data-period="diario" type="button">
             <span class="summary-tab-icon">🗓️</span>
             <span class="summary-tab-copy">
               <strong>Resumo Diário</strong>
               <small id="tabLabelDiario">Hoje</small>
             </span>
           </button>
-          <button class="summary-tab" data-period="semanal" type="button" onclick="window.PainelSF && window.PainelSF.aplicarPeriodoResumo('semanal')">
+          <button class="summary-tab" data-period="semanal" type="button">
             <span class="summary-tab-icon">🗓️</span>
             <span class="summary-tab-copy">
               <strong>Resumo Semanal</strong>
               <small id="tabLabelSemanal">Últimos 7 dias</small>
             </span>
           </button>
-          <button class="summary-tab" data-period="mensal" type="button" onclick="window.PainelSF && window.PainelSF.aplicarPeriodoResumo('mensal')">
+          <button class="summary-tab" data-period="mensal" type="button">
             <span class="summary-tab-icon">🗓️</span>
             <span class="summary-tab-copy">
               <strong>Resumo Mensal</strong>
@@ -318,9 +326,9 @@
   </div>
 
   <div id="adminModal" class="modal hidden" aria-hidden="true">
-    <div id="adminOverlay" class="modal-overlay" onclick="window.PainelSF && window.PainelSF.fecharAdminModal()"></div>
+    <div id="adminOverlay" class="modal-overlay"></div>
     <div class="modal-card admin-card">
-      <button id="closeAdmin" class="modal-close" type="button" aria-label="Fechar" onclick="window.PainelSF && window.PainelSF.fecharAdminModal()">×</button>
+      <button id="closeAdmin" class="modal-close" type="button" aria-label="Fechar">×</button>
 
       <div id="adminLoginView">
         <div class="section-head compact-head admin-head">
@@ -486,31 +494,8 @@
   <div id="importBadge" class="hidden"></div>
   <table class="hidden"><tbody id="tabelaResumoPromotores"></tbody></table>
 
-  <script src="script.js" defer></script>
+  <script type="module" src="script.js"></script>
 
 
-<script>
-window.PainelSF = window.PainelSF || {
-  alternarSidebar(force){
-    const abrir = typeof force === 'boolean' ? force : !document.body.classList.contains('sidebar-open');
-    document.body.classList.toggle('sidebar-open', abrir);
-  },
-  abrirAdminModal(){ const m=document.getElementById('adminModal'); if(m){ m.classList.remove('hidden'); m.setAttribute('aria-hidden','false'); } },
-  fecharAdminModal(){ const m=document.getElementById('adminModal'); if(m){ m.classList.add('hidden'); m.setAttribute('aria-hidden','true'); } },
-  aplicarPeriodoResumo(periodo){
-    document.querySelectorAll('.summary-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.period===periodo));
-    const di=document.getElementById('filterDataInicial'); const df=document.getElementById('filterDataFinal');
-    const base = new Date();
-    const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    if(di && df){
-      if(periodo==='diario'){ di.value=fmt(base); df.value=fmt(base); }
-      else if(periodo==='semanal'){ const ini=new Date(base); ini.setDate(base.getDate()-6); di.value=fmt(ini); df.value=fmt(base); }
-      else { const ini=new Date(base.getFullYear(), base.getMonth(), 1); di.value=fmt(ini); df.value=fmt(base); }
-    }
-  },
-  aplicarFiltrosRapido(){ document.body.classList.remove('sidebar-open'); },
-  limparFiltrosRapido(){ document.querySelectorAll('#filtersSidebar input, #filtersSidebar select').forEach(el=>el.value=''); document.body.classList.remove('sidebar-open'); }
-};
-</script>
 </body>
 </html>
