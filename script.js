@@ -259,11 +259,30 @@ function carregarStore(chave, fallback) {
 
 
 function salvarStore(chave, valor) {
-  localStorage.setItem(chave, JSON.stringify(valor));
+  try {
+    localStorage.setItem(chave, JSON.stringify(valor));
+  } catch (error) {
+    console.error(`Erro ao salvar no localStorage (${chave}):`, error);
+  }
 }
 
 function persistirSnapshotsLocais() {
-  salvarStore(STORAGE_KEYS.importedSnapshots, snapshotsImportados);
+  if (!firebaseDisponivel) {
+    salvarStore(STORAGE_KEYS.importedSnapshots, snapshotsImportados);
+    return;
+  }
+
+  const resumo = snapshotsImportados.map((item) => ({
+    id: item.id,
+    fileName: item.fileName,
+    importedAt: item.importedAt,
+    total: item.total,
+    latestDate: item.latestDate,
+    chunksCount: item.chunksCount || 0,
+    schemaVersion: item.schemaVersion || (Array.isArray(item.data) && item.data.length ? 1 : 2)
+  }));
+
+  salvarStore(STORAGE_KEYS.importedSnapshots, resumo);
 }
 
 function atualizarBasePorSnapshots(detalhe = '') {
@@ -327,10 +346,58 @@ async function salvarConfigNoFirebase() {
   }
 }
 
+function dividirEmLotes(lista, tamanho = 200) {
+  const lotes = [];
+  for (let i = 0; i < lista.length; i += tamanho) {
+    lotes.push(lista.slice(i, i + tamanho));
+  }
+  return lotes;
+}
+
+async function excluirChunksSnapshotNoFirebase(snapshotId) {
+  if (!firebaseDisponivel || !firebaseApi || !db) return;
+
+  const chunksRef = firebaseApi.collection(db, 'painel_snapshots', snapshotId, 'chunks');
+  const chunksSnap = await firebaseApi.getDocs(chunksRef);
+  const docs = chunksSnap.docs || [];
+
+  for (let i = 0; i < docs.length; i += 200) {
+    const batch = firebaseApi.writeBatch(db);
+    docs.slice(i, i + 200).forEach((docItem) => batch.delete(docItem.ref));
+    await batch.commit();
+  }
+}
+
 async function salvarSnapshotNoFirebase(snapshot) {
   if (!firebaseDisponivel || !firebaseApi || !db) return false;
   try {
-    await firebaseApi.setDoc(firebaseApi.doc(db, 'painel_snapshots', snapshot.id), snapshot, { merge: true });
+    const { data, ...meta } = snapshot;
+    const lotes = dividirEmLotes(Array.isArray(data) ? data : [], 200);
+
+    await excluirChunksSnapshotNoFirebase(snapshot.id);
+
+    for (let i = 0; i < lotes.length; i += 20) {
+      const batch = firebaseApi.writeBatch(db);
+      lotes.slice(i, i + 20).forEach((lote, indiceInterno) => {
+        const indice = i + indiceInterno;
+        const chunkRef = firebaseApi.doc(db, 'painel_snapshots', snapshot.id, 'chunks', `chunk-${String(indice).padStart(4, '0')}`);
+        batch.set(chunkRef, {
+          index: indice,
+          rows: lote,
+          fileName: snapshot.fileName,
+          importedAt: snapshot.importedAt
+        });
+      });
+      await batch.commit();
+    }
+
+    await firebaseApi.setDoc(firebaseApi.doc(db, 'painel_snapshots', snapshot.id), {
+      ...meta,
+      chunksCount: lotes.length,
+      schemaVersion: 2,
+      updatedAt: new Date().toISOString(),
+      data: firebaseApi.deleteField()
+    }, { merge: true });
     return true;
   } catch (error) {
     console.error('Erro ao salvar snapshot no Firebase:', error);
@@ -341,6 +408,7 @@ async function salvarSnapshotNoFirebase(snapshot) {
 async function excluirSnapshotNoFirebase(snapshotId) {
   if (!firebaseDisponivel || !firebaseApi || !db) return false;
   try {
+    await excluirChunksSnapshotNoFirebase(snapshotId);
     await firebaseApi.deleteDoc(firebaseApi.doc(db, 'painel_snapshots', snapshotId));
     return true;
   } catch (error) {
@@ -351,12 +419,11 @@ async function excluirSnapshotNoFirebase(snapshotId) {
 
 async function limparSnapshotsNoFirebase() {
   if (!firebaseDisponivel || !firebaseApi || !db) return false;
-  const batch = firebaseApi.writeBatch(db);
-  snapshotsImportados.forEach((snapshot) => {
-    batch.delete(firebaseApi.doc(db, 'painel_snapshots', snapshot.id));
-  });
   try {
-    await batch.commit();
+    const ids = [...new Set(snapshotsImportados.map((snapshot) => snapshot.id).filter(Boolean))];
+    for (const snapshotId of ids) {
+      await excluirSnapshotNoFirebase(snapshotId);
+    }
     return true;
   } catch (error) {
     console.error('Erro ao limpar snapshots no Firebase:', error);
@@ -370,8 +437,36 @@ function normalizarSnapshotFirebase(snapshot) {
     importedAt: typeof snapshot.importedAt === 'string'
       ? snapshot.importedAt
       : (snapshot.importedAt?.toDate ? snapshot.importedAt.toDate().toISOString() : new Date().toISOString()),
-    data: Array.isArray(snapshot.data) ? snapshot.data : []
+    data: Array.isArray(snapshot.data) ? snapshot.data : [],
+    chunksCount: Number(snapshot.chunksCount || 0),
+    schemaVersion: Number(snapshot.schemaVersion || (Array.isArray(snapshot.data) && snapshot.data.length ? 1 : 2))
   };
+}
+
+async function carregarDadosSnapshotNoFirebase(snapshot) {
+  if (Array.isArray(snapshot?.data) && snapshot.data.length) {
+    return snapshot.data;
+  }
+
+  if (!firebaseDisponivel || !firebaseApi || !db || !snapshot?.id) return [];
+  if (!snapshot.chunksCount) return [];
+
+  try {
+    const chunksRef = firebaseApi.collection(db, 'painel_snapshots', snapshot.id, 'chunks');
+    const chunksQuery = firebaseApi.query(chunksRef, firebaseApi.orderBy('index', 'asc'));
+    const chunksSnap = await firebaseApi.getDocs(chunksQuery);
+    const linhas = [];
+
+    chunksSnap.forEach((docItem) => {
+      const dados = docItem.data();
+      if (Array.isArray(dados.rows)) linhas.push(...dados.rows);
+    });
+
+    return linhas;
+  } catch (error) {
+    console.error(`Erro ao carregar dados do snapshot ${snapshot.id}:`, error);
+    return [];
+  }
 }
 
 function aplicarEstadoRemoto() {
@@ -404,9 +499,15 @@ function iniciarFirebaseSync() {
     console.error('Erro ao sincronizar configurações do Firebase:', error);
   });
 
-  firebaseApi.onSnapshot(firebaseApi.query(snapshotsCollectionRef, firebaseApi.orderBy('importedAt', 'desc')), (snapshot) => {
-    snapshotsImportados = snapshot.docs.map((item) => normalizarSnapshotFirebase({ id: item.id, ...item.data() }));
-    salvarStore(STORAGE_KEYS.importedSnapshots, snapshotsImportados);
+  firebaseApi.onSnapshot(firebaseApi.query(snapshotsCollectionRef, firebaseApi.orderBy('importedAt', 'desc')), async (snapshot) => {
+    const metas = snapshot.docs.map((item) => normalizarSnapshotFirebase({ id: item.id, ...item.data() }));
+    const completos = await Promise.all(metas.map(async (item) => ({
+      ...item,
+      data: await carregarDadosSnapshotNoFirebase(item)
+    })));
+
+    snapshotsImportados = completos;
+    persistirSnapshotsLocais();
     firebaseSnapshotsRecebidos = true;
     if (firebaseInicializado) aplicarEstadoRemoto();
   }, (error) => {
@@ -1537,15 +1638,20 @@ async function importarArquivo() {
       importedAt: new Date().toISOString(),
       total: item.baseImportada.length,
       latestDate: obterUltimaData(item.baseImportada),
-      data: item.baseImportada
+      data: item.baseImportada,
+      chunksCount: 0,
+      schemaVersion: firebaseDisponivel ? 2 : 1
     };
 
-    snapshotsImportados.push(snapshot);
-    totalRegistros += item.baseImportada.length;
-    arquivosImportados += 1;
-
-    const synced = await salvarSnapshotNoFirebase(snapshot);
-    if (synced) sincronizados += 1;
+    const synced = firebaseDisponivel ? await salvarSnapshotNoFirebase(snapshot) : true;
+    if (synced) {
+      snapshotsImportados.push(snapshot);
+      totalRegistros += item.baseImportada.length;
+      arquivosImportados += 1;
+      if (firebaseDisponivel) sincronizados += 1;
+    } else {
+      erros.push(`${item.fileName}: falha ao sincronizar no Firebase`);
+    }
   }
 
   persistirSnapshotsLocais();
@@ -1610,7 +1716,7 @@ function aplicarRegrasAdministrativasNaBaseAtual() {
   registrosBase = normalizarBaseCompleta(registrosBase, temSnapshots ? 'importada' : 'simulada');
   if (temSnapshots) {
     snapshotsImportados = snapshotsImportados.map((item) => ({ ...item, data: normalizarBaseCompleta(item.data, 'importada') }));
-    salvarStore(STORAGE_KEYS.importedSnapshots, snapshotsImportados);
+    persistirSnapshotsLocais();
   }
   aplicarBase(registrosBase, temSnapshots ? 'importada' : 'simulada', importSummary?.textContent || 'Base atualizada.');
 }
