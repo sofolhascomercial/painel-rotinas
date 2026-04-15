@@ -2172,9 +2172,56 @@ function obterRotinasCriticas(dados, limite = 5) {
 
 function obterMelhoresLojasPorFormador(dados) {
   const porFormador = agregarLojasPorFormador(dados);
-  return Object.keys(porFormador).sort((a, b) => a.localeCompare(b, 'pt-BR')).map((formador) => {
-    const melhorLoja = [...porFormador[formador]].sort((a, b) => percentual(b.realizadas, b.total) - percentual(a.realizadas, a.total) || b.realizadas - a.realizadas || a.loja.localeCompare(b.loja, 'pt-BR'))[0];
-    return { ...melhorLoja, formador, execucao: percentual(melhorLoja.realizadas, melhorLoja.total) };
+  return FORMADORES_ATIVOS
+    .filter((formador) => Array.isArray(porFormador[formador]) && porFormador[formador].length)
+    .map((formador) => {
+      const melhorLoja = [...porFormador[formador]].sort((a, b) => percentual(b.realizadas, b.total) - percentual(a.realizadas, a.total) || b.realizadas - a.realizadas || a.loja.localeCompare(b.loja, 'pt-BR'))[0];
+      return { ...melhorLoja, formador, execucao: percentual(melhorLoja.realizadas, melhorLoja.total) };
+    });
+}
+
+function obterRankingFormadoresApresentacao(dados, limite = 3) {
+  const agrupado = agregarPorFormador(dados);
+  const posicoes = new Map(FORMADORES_ATIVOS.map((nome, indice) => [slug(nome), indice]));
+  return agrupado
+    .filter((item) => ehFormadorAtivo(item.nome))
+    .sort((a, b) => {
+      const diferencaExecucao = percentual(b.realizadas, b.total) - percentual(a.realizadas, a.total);
+      if (diferencaExecucao) return diferencaExecucao;
+      const diferencaRealizadas = b.realizadas - a.realizadas;
+      if (diferencaRealizadas) return diferencaRealizadas;
+      return (posicoes.get(slug(a.nome)) ?? 999) - (posicoes.get(slug(b.nome)) ?? 999);
+    })
+    .slice(0, limite);
+}
+
+function aplicarAjusteFitApresentacao() {
+  if (!apresentacaoState.aberta) return;
+  const modal = document.getElementById('presentationModal');
+  const content = document.getElementById('presentationContent');
+  const frame = content?.querySelector('.presentation-frame');
+  const scaleBox = content?.querySelector('.presentation-scale-box');
+  const visualSlide = content?.querySelector('.presentation-slide-visual, .presentation-slide');
+  if (!modal || !content || !frame || !scaleBox || !visualSlide) return;
+
+  frame.classList.remove('is-compact', 'is-ultra-compact');
+
+  const baseWidth = Number(frame.dataset.baseWidth || 1600);
+  const baseHeight = Number(frame.dataset.baseHeight || 900);
+  const viewportWidth = Math.max(content.clientWidth - 8, 320);
+  const viewportHeight = Math.max(content.clientHeight - 8, 240);
+  const scale = Math.min(viewportWidth / baseWidth, viewportHeight / baseHeight, 1);
+
+  scaleBox.style.width = `${baseWidth}px`;
+  scaleBox.style.height = `${baseHeight}px`;
+  scaleBox.style.transform = `scale(${scale})`;
+
+  const needsCompact = visualSlide.scrollHeight > visualSlide.clientHeight || window.innerHeight < 900 || window.innerWidth < 1500;
+  if (needsCompact) frame.classList.add('is-compact');
+
+  requestAnimationFrame(() => {
+    const overflowPersistente = visualSlide.scrollHeight > visualSlide.clientHeight + 4 || window.innerHeight < 820 || window.innerWidth < 1380;
+    frame.classList.toggle('is-ultra-compact', overflowPersistente);
   });
 }
 
@@ -2257,10 +2304,10 @@ function montarHeroSlideApresentacao(titulo, periodo) {
 function gerarSlidesApresentacao() {
   const dados = [...dadosFiltrados];
   const kpis = resumirKPIs(dados);
-  const formadores = agregarPorFormador(dados).slice(0, 6);
+  const formadores = obterRankingFormadoresApresentacao(dados, 3);
   const topLojas = obterTopLojas(dados, 7);
   const rotinasCriticas = obterRotinasCriticas(dados, 6);
-  const destaques = obterMelhoresLojasPorFormador(dados);
+  const destaques = obterMelhoresLojasPorFormador(dados).slice(0, 3);
   const calendarioHtml = document.getElementById('calendarioExecucao')?.innerHTML || '';
   const periodo = obterPeriodoResumoLabel();
   const filtrosHtml = montarFiltrosApresentacao();
@@ -2547,12 +2594,20 @@ function renderizarApresentacaoSeAberta() {
   if (subtitle) subtitle.textContent = slide.subtitulo;
   if (counter) counter.textContent = `Slide ${apresentacaoState.slideAtual + 1} de ${slides.length}`;
   if (period) period.textContent = slide.periodo;
-  if (content) content.innerHTML = slide.html;
+  if (content) {
+    content.innerHTML = `
+      <div class="presentation-viewport">
+        <div class="presentation-scale-box">
+          <div class="presentation-frame" data-base-width="1600" data-base-height="900">${slide.html}</div>
+        </div>
+      </div>`;
+  }
   if (filtersEl) filtersEl.innerHTML = slide.filtrosHtml;
   if (playPause) playPause.textContent = apresentacaoState.autoplay ? 'Pausar' : 'Retomar';
   if (dots) {
     dots.innerHTML = slides.map((item, index) => `<button class="presentation-dot ${index === apresentacaoState.slideAtual ? 'active' : ''}" type="button" aria-label="Ir para slide ${index + 1}" data-slide-index="${index}"></button>`).join('');
   }
+  requestAnimationFrame(aplicarAjusteFitApresentacao);
 }
 
 function abrirApresentacao({ auto = false } = {}) {
@@ -2613,6 +2668,12 @@ function configurarApresentacao() {
       irParaSlideApresentacao(Number(button.dataset.slideIndex));
     });
   }
+  window.addEventListener('resize', () => {
+    if (apresentacaoState.aberta) requestAnimationFrame(aplicarAjusteFitApresentacao);
+  });
+  document.addEventListener('fullscreenchange', () => {
+    if (apresentacaoState.aberta) requestAnimationFrame(aplicarAjusteFitApresentacao);
+  });
   document.addEventListener('keydown', (event) => {
     if (!apresentacaoState.aberta) return;
     if (event.key === 'Escape') fecharApresentacao();
