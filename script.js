@@ -25,6 +25,17 @@ let firebaseConfigRecebida = false;
 let firebaseSnapshotsRecebidos = false;
 let resumoPeriodoAtual = 'diario';
 
+const APRESENTACAO_CONFIG = {
+  intervaloMs: 10000
+};
+
+const apresentacaoState = {
+  aberta: false,
+  slideAtual: 0,
+  autoplay: true,
+  timer: null
+};
+
 const STORAGE_KEYS = {
   adminLogged: 'sf_admin_logged',
   storeFormadorMap: 'sf_store_formador_map',
@@ -1216,7 +1227,9 @@ function renderizarPainel() {
   renderTabelaRotinas(dadosFiltrados);
   renderResumoLojas(dadosFiltrados);
   renderCalendarioExecucao(dadosFiltrados);
+  renderizarApresentacaoSeAberta();
 }
+
 
 function limparFiltros() {
   filtros.rede.value = '';
@@ -2100,6 +2113,12 @@ window.PainelSF = Object.assign(window.PainelSF || {}, {
     modal.setAttribute('aria-hidden', 'true');
   },
   aplicarPeriodoResumo,
+  abrirApresentacao,
+  fecharApresentacao,
+  proximoSlideApresentacao() { irParaSlideApresentacao(apresentacaoState.slideAtual + 1); },
+  slideAnteriorApresentacao() { irParaSlideApresentacao(apresentacaoState.slideAtual - 1); },
+  alternarAutoplayApresentacao,
+  alternarFullscreenApresentacao,
   aplicarFiltrosRapido() {
     try { renderizarPainel(); } catch (error) { console.error(error); }
     document.body.classList.remove('sidebar-open');
@@ -2110,6 +2129,496 @@ window.PainelSF = Object.assign(window.PainelSF || {}, {
   }
 });
 
+
+function obterPeriodoResumoLabel() {
+  const labels = {
+    diario: document.getElementById('tabLabelDiario')?.textContent?.trim() || 'Hoje',
+    semanal: document.getElementById('tabLabelSemanal')?.textContent?.trim() || 'Últimos 7 dias',
+    mensal: document.getElementById('tabLabelMensal')?.textContent?.trim() || 'Mês atual'
+  };
+  const prefixos = {
+    diario: 'Resumo diário',
+    semanal: 'Resumo semanal',
+    mensal: 'Resumo mensal'
+  };
+  return `${prefixos[resumoPeriodoAtual] || 'Resumo'} • ${labels[resumoPeriodoAtual] || ''}`;
+}
+
+function resumirKPIs(dados) {
+  const previstas = dados.length;
+  const realizadas = dados.filter((item) => item.status === 'realizada').length;
+  const pendentes = dados.filter((item) => item.status === 'pendente').length;
+  const execucao = percentual(realizadas, previstas);
+  return { previstas, realizadas, pendentes, execucao };
+}
+
+function obterTopLojas(dados, limite = 6) {
+  return Object.values(dados.reduce((acc, item) => {
+    if (!acc[item.loja]) acc[item.loja] = { loja: item.loja, rede: item.rede, formador: item.formador, realizadas: 0, total: 0 };
+    acc[item.loja].total += 1;
+    if (item.status === 'realizada') acc[item.loja].realizadas += 1;
+    return acc;
+  }, {})).sort((a, b) => percentual(b.realizadas, b.total) - percentual(a.realizadas, a.total) || b.realizadas - a.realizadas || a.loja.localeCompare(b.loja, 'pt-BR')).slice(0, limite);
+}
+
+function obterRotinasCriticas(dados, limite = 5) {
+  return Object.values(dados.reduce((acc, item) => {
+    if (!acc[item.rotina]) acc[item.rotina] = { rotina: item.rotina, realizadas: 0, total: 0 };
+    acc[item.rotina].total += 1;
+    if (item.status === 'realizada') acc[item.rotina].realizadas += 1;
+    return acc;
+  }, {})).sort((a, b) => percentual(a.realizadas, a.total) - percentual(b.realizadas, b.total) || b.total - a.total || a.rotina.localeCompare(b.rotina, 'pt-BR')).slice(0, limite);
+}
+
+function obterMelhoresLojasPorFormador(dados) {
+  const porFormador = agregarLojasPorFormador(dados);
+  return Object.keys(porFormador).sort((a, b) => a.localeCompare(b, 'pt-BR')).map((formador) => {
+    const melhorLoja = [...porFormador[formador]].sort((a, b) => percentual(b.realizadas, b.total) - percentual(a.realizadas, a.total) || b.realizadas - a.realizadas || a.loja.localeCompare(b.loja, 'pt-BR'))[0];
+    return { ...melhorLoja, formador, execucao: percentual(melhorLoja.realizadas, melhorLoja.total) };
+  });
+}
+
+function montarFiltrosApresentacao() {
+  return montarResumoFiltrosAtivos().map((item) => `<div class="presentation-filter-chip"><strong>${escaparHtml(item.rotulo)}:</strong><span>${escaparHtml(item.valor)}</span></div>`).join('');
+}
+
+function criarListaApresentacao(itens, renderItem) {
+  if (!itens.length) {
+    return '<div class="presentation-empty">Sem dados no recorte atual.</div>';
+  }
+  return `<div class="presentation-list">${itens.map((item, index) => renderItem(item, index)).join('')}</div>`;
+}
+
+function obterMetaApresentacao() {
+  return 80;
+}
+
+function formatarHoraApresentacao(data = new Date()) {
+  return data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatarDataApresentacao(data = new Date()) {
+  return data.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
+}
+
+function formatarDataTituloApresentacao(data = new Date()) {
+  return data.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }).toUpperCase();
+}
+
+function classeExecucaoApresentacao(execucao) {
+  if (execucao >= 90) return 'is-high';
+  if (execucao >= 80) return 'is-medium';
+  return 'is-low';
+}
+
+function mensagemMetaApresentacao(execucao, meta = obterMetaApresentacao()) {
+  if (execucao >= meta + 5) return 'ACIMA DA META';
+  if (execucao >= meta) return 'META ATINGIDA';
+  return 'ABAIXO DA META';
+}
+
+function montarHeroSlideApresentacao(titulo, periodo) {
+  const agora = new Date();
+  return `
+    <div class="presentation-hero-header">
+      <div class="presentation-brand-block">
+        <img src="logo-sofolhas.png" alt="Só Folhas Hortifruti" class="presentation-brand-logo" />
+      </div>
+      <div class="presentation-clock-block">
+        <div class="presentation-clock-time">${escaparHtml(formatarHoraApresentacao(agora))}</div>
+        <div class="presentation-clock-date">${escaparHtml(formatarDataApresentacao(agora))}</div>
+      </div>
+      <div class="presentation-title-block">
+        <h3 class="presentation-screen-title">${escaparHtml(titulo)}</h3>
+        <div class="presentation-title-meta-row">
+          <span class="presentation-period-pill">PERÍODO</span>
+          <span class="presentation-period-value">${escaparHtml(periodo)}</span>
+        </div>
+        <div class="presentation-stamp-row">
+          <span class="presentation-stamp-dot"></span>
+          <span>${escaparHtml(formatarDataTituloApresentacao(agora))} • ${escaparHtml(formatarHoraApresentacao(agora))}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function gerarSlidesApresentacao() {
+  const dados = [...dadosFiltrados];
+  const kpis = resumirKPIs(dados);
+  const formadores = agregarPorFormador(dados).slice(0, 6);
+  const topLojas = obterTopLojas(dados, 7);
+  const rotinasCriticas = obterRotinasCriticas(dados, 6);
+  const destaques = obterMelhoresLojasPorFormador(dados);
+  const calendarioHtml = document.getElementById('calendarioExecucao')?.innerHTML || '';
+  const periodo = obterPeriodoResumoLabel();
+  const filtrosHtml = montarFiltrosApresentacao();
+  const meta = obterMetaApresentacao();
+  const diferencaMeta = kpis.execucao - meta;
+  const statusMeta = mensagemMetaApresentacao(kpis.execucao, meta);
+  const progressoExecucao = Math.max(0, Math.min(kpis.execucao, 100));
+  const progressoMeta = Math.max(0, Math.min((kpis.execucao / Math.max(meta, 1)) * 100, 100));
+  const top3Formadores = formadores.slice(0, 3);
+
+  if (!dados.length) {
+    return [{
+      titulo: 'Modo apresentação',
+      subtitulo: 'O painel está sem dados no momento.',
+      periodo,
+      filtrosHtml,
+      html: '<div class="presentation-empty"><div><h3>Nenhuma planilha ativa</h3><p>Entre na área ADM, importe a base e volte para este modo para exibir a TV automaticamente.</p></div></div>'
+    }];
+  }
+
+  const slideExecutivo = {
+    titulo: 'Slide 1',
+    subtitulo: 'Abertura executiva do painel.',
+    periodo,
+    filtrosHtml,
+    html: `
+      <div class="presentation-slide presentation-slide-visual presentation-slide-intro">
+        ${montarHeroSlideApresentacao('PAINEL DE ROTINAS OPERACIONAIS', periodo)}
+        <div class="presentation-summary-grid">
+          <article class="presentation-summary-card">
+            <div class="presentation-summary-head">PREVISTAS</div>
+            <div class="presentation-summary-icon">☑</div>
+            <div class="presentation-summary-value">${formatarNumero.format(kpis.previstas)}</div>
+            <div class="presentation-summary-label">Rotinas previstas</div>
+          </article>
+          <article class="presentation-summary-card">
+            <div class="presentation-summary-head">REALIZADAS</div>
+            <div class="presentation-summary-icon">✅</div>
+            <div class="presentation-summary-value">${formatarNumero.format(kpis.realizadas)}</div>
+            <div class="presentation-summary-label">Rotinas realizadas</div>
+          </article>
+          <article class="presentation-summary-card is-warning">
+            <div class="presentation-summary-head">PENDÊNCIAS</div>
+            <div class="presentation-summary-icon">⚠</div>
+            <div class="presentation-summary-value">${formatarNumero.format(kpis.pendentes)}</div>
+            <div class="presentation-summary-label">Rotinas não finalizadas</div>
+          </article>
+          <article class="presentation-summary-card presentation-summary-ring-card">
+            <div class="presentation-summary-head">EXECUÇÃO GERAL</div>
+            <div class="presentation-summary-ring" style="--progress:${progressoExecucao}">
+              <div class="presentation-summary-ring-inner">
+                <div class="presentation-summary-ring-value">${kpis.execucao}%</div>
+                <div class="presentation-summary-ring-label">Eficiência média</div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="presentation-slide-caption">Resumo geral do período selecionado</div>
+      </div>`
+  };
+
+  const slideFormadores = {
+    titulo: 'Slide 2',
+    subtitulo: 'Execução geral versus meta.',
+    periodo,
+    filtrosHtml,
+    html: `
+      <div class="presentation-slide presentation-slide-visual presentation-slide-target">
+        ${montarHeroSlideApresentacao('EXECUÇÃO GERAL VS META', periodo)}
+        <div class="presentation-vs-grid">
+          <div class="presentation-vs-ring-shell">
+            <div class="presentation-vs-ring" style="--progress:${progressoExecucao}">
+              <div class="presentation-vs-ring-inner">
+                <div class="presentation-vs-ring-value">${kpis.execucao}%</div>
+                <div class="presentation-vs-ring-label">Execução no período</div>
+              </div>
+            </div>
+          </div>
+          <div class="presentation-vs-panel ${diferencaMeta >= 0 ? 'is-positive' : 'is-negative'}">
+            <div class="presentation-vs-panel-grid">
+              <div>
+                <div class="presentation-vs-status">${escaparHtml(statusMeta)}</div>
+                <div class="presentation-vs-copy">${kpis.execucao >= meta ? 'Eficiência geral dentro ou acima da meta estabelecida.' : 'Eficiência geral abaixo da meta estabelecida.'}</div>
+              </div>
+              <div class="presentation-vs-meta-box">
+                <div class="presentation-vs-meta-title">META</div>
+                <div class="presentation-vs-meta-value">${meta}%</div>
+              </div>
+            </div>
+            <div class="presentation-vs-bar-track">
+              <div class="presentation-vs-bar-fill" style="width:${progressoExecucao}%"></div>
+              <div class="presentation-vs-bar-marker" style="left:${meta}%"></div>
+            </div>
+            <div class="presentation-vs-bottom-row">
+              <span>${meta}%</span>
+              <strong>${diferencaMeta >= 0 ? '+' : ''}${diferencaMeta}%</strong>
+            </div>
+          </div>
+        </div>
+        <div class="presentation-slide-caption">${kpis.execucao >= meta ? 'Meta de execução atingida neste período' : 'Meta de execução não atingida neste período'}</div>
+      </div>`
+  };
+
+  const slideDestaques = {
+    titulo: 'Slide 3',
+    subtitulo: 'Ranking visual dos formadores.',
+    periodo,
+    filtrosHtml,
+    html: `
+      <div class="presentation-slide presentation-slide-visual presentation-slide-podium">
+        ${montarHeroSlideApresentacao('RANKING DE FORMADORES', periodo)}
+        <div class="presentation-podium-grid ${top3Formadores.length < 3 ? 'is-compact' : ''}">
+          ${top3Formadores.map((item, index) => {
+            const execucao = percentual(item.realizadas, item.total);
+            const posicoes = ['gold', 'silver', 'bronze'];
+            const coroas = ['♛', '♕', '♕'];
+            const ordens = [1, 0, 2];
+            const variante = posicoes[index] || 'bronze';
+            const coroa = coroas[index] || '♕';
+            const ordem = ordens[index] || index;
+            return `
+              <article class="presentation-podium-card ${variante}" style="order:${ordem}">
+                <div class="presentation-podium-crown">${coroa}</div>
+                <div class="presentation-podium-name">${escaparHtml(item.nome)}</div>
+                <div class="presentation-podium-value">${execucao}%</div>
+                <div class="presentation-podium-meta">${item.realizadas} de ${item.total}</div>
+                <div class="presentation-podium-footer">
+                  <span>${index + 1}º no período</span>
+                  <strong>${classeExecucaoApresentacao(execucao) === 'is-high' ? 'Alto desempenho' : classeExecucaoApresentacao(execucao) === 'is-medium' ? 'Bom desempenho' : 'Atenção'}</strong>
+                </div>
+              </article>`;
+          }).join('')}
+        </div>
+        <div class="presentation-slide-caption">${top3Formadores[0] ? `${escaparHtml(top3Formadores[0].nome)} lidera o ranking atual` : 'Ranking atualizado automaticamente'}</div>
+      </div>`
+  };
+
+  const slideLojas = {
+    titulo: 'Slide 4',
+    subtitulo: 'Melhores lojas por formador.',
+    periodo,
+    filtrosHtml,
+    html: `
+      <div class="presentation-slide presentation-slide-visual presentation-slide-showcase">
+        ${montarHeroSlideApresentacao('MELHOR LOJA POR FORMADOR', periodo)}
+        <div class="presentation-showcase-grid">
+          ${destaques.map((item) => `
+            <article class="presentation-showcase-card ${classeExecucaoApresentacao(item.execucao)}">
+              <div class="presentation-showcase-formador">${escaparHtml(item.formador)}</div>
+              <div class="presentation-showcase-loja">${escaparHtml(item.loja)}</div>
+              <div class="presentation-showcase-value">${item.execucao}%</div>
+              <div class="presentation-showcase-meta">${item.realizadas} de ${item.total}</div>
+              <div class="presentation-showcase-badge">✩ EM DESTAQUE</div>
+            </article>`).join('')}
+        </div>
+        <div class="presentation-slide-caption">Melhores lojas por desempenho dos formadores ativos</div>
+      </div>`
+  };
+
+  const slideCriticos = {
+    titulo: 'Rotinas críticas e atenção',
+    subtitulo: 'Pontos que merecem acompanhamento no período.',
+    periodo,
+    filtrosHtml,
+    html: `
+      <div class="presentation-slide presentation-dual-panels">
+        <div class="presentation-panel">
+          <h3 class="presentation-panel-title">Rotinas menos realizadas</h3>
+          ${criarListaApresentacao(rotinasCriticas, (item, index) => {
+            const execucao = percentual(item.realizadas, item.total);
+            return `
+              <div class="presentation-list-item">
+                <div class="presentation-list-rank">${index + 1}</div>
+                <div class="presentation-list-main">
+                  <div class="presentation-list-title">${escaparHtml(item.rotina)}</div>
+                  <div class="presentation-list-meta">${item.realizadas} realizadas de ${item.total} previstas</div>
+                  <div class="presentation-progress"><div class="presentation-progress-fill" style="width:${execucao}%"></div></div>
+                </div>
+                <div class="presentation-list-value">${execucao}%</div>
+              </div>`;
+          })}
+        </div>
+        <div class="presentation-panel">
+          <h3 class="presentation-panel-title">Leitura rápida</h3>
+          <div class="presentation-list">
+            <div class="presentation-list-item">
+              <div class="presentation-list-rank">⚠️</div>
+              <div class="presentation-list-main">
+                <div class="presentation-list-title">Pendências no período</div>
+                <div class="presentation-list-meta">Rotinas não concluídas no recorte atual</div>
+              </div>
+              <div class="presentation-list-value">${kpis.pendentes}</div>
+            </div>
+            <div class="presentation-list-item">
+              <div class="presentation-list-rank">🏬</div>
+              <div class="presentation-list-main">
+                <div class="presentation-list-title">Lojas acompanhadas</div>
+                <div class="presentation-list-meta">Quantidade de lojas com registros no período</div>
+              </div>
+              <div class="presentation-list-value">${new Set(dados.map((item) => item.loja)).size}</div>
+            </div>
+            <div class="presentation-list-item">
+              <div class="presentation-list-rank">🧾</div>
+              <div class="presentation-list-main">
+                <div class="presentation-list-title">Rotinas cadastradas</div>
+                <div class="presentation-list-meta">Quantidade de rotinas presentes no recorte atual</div>
+              </div>
+              <div class="presentation-list-value">${new Set(dados.map((item) => item.rotina)).size}</div>
+            </div>
+          </div>
+        </div>
+      </div>`
+  };
+
+  const slideCalendario = {
+    titulo: 'Calendário mensal',
+    subtitulo: 'Visão diária da execução para acompanhamento em tela grande.',
+    periodo,
+    filtrosHtml,
+    html: `
+      <div class="presentation-slide">
+        <div class="presentation-panel presentation-calendar-shell">
+          ${calendarioHtml || '<div class="presentation-empty">Sem calendário disponível para o período atual.</div>'}
+        </div>
+      </div>`
+  };
+
+  return [slideExecutivo, slideFormadores, slideDestaques, slideLojas, slideCriticos, slideCalendario];
+}
+
+function limparTimerApresentacao() {
+  if (apresentacaoState.timer) {
+    clearInterval(apresentacaoState.timer);
+    apresentacaoState.timer = null;
+  }
+}
+
+function iniciarAutoplayApresentacao() {
+  limparTimerApresentacao();
+  if (!apresentacaoState.aberta || !apresentacaoState.autoplay) return;
+  apresentacaoState.timer = setInterval(() => {
+    const slides = gerarSlidesApresentacao();
+    if (!slides.length) return;
+    apresentacaoState.slideAtual = (apresentacaoState.slideAtual + 1) % slides.length;
+    renderizarApresentacaoSeAberta();
+  }, APRESENTACAO_CONFIG.intervaloMs);
+}
+
+function irParaSlideApresentacao(indice) {
+  const slides = gerarSlidesApresentacao();
+  if (!slides.length) return;
+  const total = slides.length;
+  apresentacaoState.slideAtual = ((indice % total) + total) % total;
+  renderizarApresentacaoSeAberta();
+  iniciarAutoplayApresentacao();
+}
+
+function renderizarApresentacaoSeAberta() {
+  if (!apresentacaoState.aberta) return;
+  const modal = document.getElementById('presentationModal');
+  const title = document.getElementById('presentationTitle');
+  const subtitle = document.getElementById('presentationSubtitle');
+  const counter = document.getElementById('presentationCounter');
+  const period = document.getElementById('presentationPeriod');
+  const content = document.getElementById('presentationContent');
+  const dots = document.getElementById('presentationDots');
+  const filtersEl = document.getElementById('presentationFilters');
+  const playPause = document.getElementById('presentationPlayPause');
+  if (!modal || !content) return;
+
+  const slides = gerarSlidesApresentacao();
+  if (!slides.length) return;
+  if (apresentacaoState.slideAtual >= slides.length) apresentacaoState.slideAtual = 0;
+  const slide = slides[apresentacaoState.slideAtual];
+
+  if (title) title.textContent = slide.titulo;
+  if (subtitle) subtitle.textContent = slide.subtitulo;
+  if (counter) counter.textContent = `Slide ${apresentacaoState.slideAtual + 1} de ${slides.length}`;
+  if (period) period.textContent = slide.periodo;
+  if (content) content.innerHTML = slide.html;
+  if (filtersEl) filtersEl.innerHTML = slide.filtrosHtml;
+  if (playPause) playPause.textContent = apresentacaoState.autoplay ? 'Pausar' : 'Retomar';
+  if (dots) {
+    dots.innerHTML = slides.map((item, index) => `<button class="presentation-dot ${index === apresentacaoState.slideAtual ? 'active' : ''}" type="button" aria-label="Ir para slide ${index + 1}" data-slide-index="${index}"></button>`).join('');
+  }
+}
+
+function abrirApresentacao({ auto = false } = {}) {
+  const modal = document.getElementById('presentationModal');
+  if (!modal) return;
+  apresentacaoState.aberta = true;
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('presentation-open');
+  renderizarApresentacaoSeAberta();
+  iniciarAutoplayApresentacao();
+  if (!auto) {
+    const stage = modal.querySelector('.presentation-stage');
+    if (stage?.requestFullscreen) {
+      stage.requestFullscreen().catch(() => {});
+    }
+  }
+}
+
+function fecharApresentacao() {
+  const modal = document.getElementById('presentationModal');
+  if (!modal) return;
+  apresentacaoState.aberta = false;
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('presentation-open');
+  limparTimerApresentacao();
+}
+
+function alternarAutoplayApresentacao() {
+  apresentacaoState.autoplay = !apresentacaoState.autoplay;
+  renderizarApresentacaoSeAberta();
+  iniciarAutoplayApresentacao();
+}
+
+function alternarFullscreenApresentacao() {
+  const stage = document.querySelector('#presentationModal .presentation-stage');
+  if (!stage) return;
+  if (document.fullscreenElement) {
+    document.exitFullscreen?.().catch?.(() => {});
+    return;
+  }
+  stage.requestFullscreen?.().catch?.(() => {});
+}
+
+function configurarApresentacao() {
+  const openBtn = document.getElementById('presentationToggle');
+  const closeBtn = document.getElementById('presentationClose');
+  const prevBtn = document.getElementById('presentationPrev');
+  const nextBtn = document.getElementById('presentationNext');
+  const playPauseBtn = document.getElementById('presentationPlayPause');
+  const fullscreenBtn = document.getElementById('presentationFullscreen');
+  const dots = document.getElementById('presentationDots');
+  if (openBtn) openBtn.addEventListener('click', () => abrirApresentacao());
+  if (closeBtn) closeBtn.addEventListener('click', fecharApresentacao);
+  if (prevBtn) prevBtn.addEventListener('click', () => irParaSlideApresentacao(apresentacaoState.slideAtual - 1));
+  if (nextBtn) nextBtn.addEventListener('click', () => irParaSlideApresentacao(apresentacaoState.slideAtual + 1));
+  if (playPauseBtn) playPauseBtn.addEventListener('click', alternarAutoplayApresentacao);
+  if (fullscreenBtn) fullscreenBtn.addEventListener('click', alternarFullscreenApresentacao);
+  if (dots) {
+    dots.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-slide-index]');
+      if (!button) return;
+      irParaSlideApresentacao(Number(button.dataset.slideIndex));
+    });
+  }
+  document.addEventListener('keydown', (event) => {
+    if (!apresentacaoState.aberta) return;
+    if (event.key === 'Escape') fecharApresentacao();
+    if (event.key === 'ArrowRight') irParaSlideApresentacao(apresentacaoState.slideAtual + 1);
+    if (event.key === 'ArrowLeft') irParaSlideApresentacao(apresentacaoState.slideAtual - 1);
+    if (event.key === ' ') {
+      event.preventDefault();
+      alternarAutoplayApresentacao();
+    }
+  });
+}
+
+function autoAbrirApresentacaoSeSolicitado() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('apresentacao') === '1' || params.get('tv') === '1') {
+    abrirApresentacao({ auto: true });
+  }
+}
+
 function inicializarAplicacao() {
   if (window.__sfPainelInicializado) return;
   window.__sfPainelInicializado = true;
@@ -2117,7 +2626,9 @@ function inicializarAplicacao() {
   configurarEventos();
   configurarAdmin();
   configurarAbasResumo();
+  configurarApresentacao();
   inicializarBaseAtiva();
+  autoAbrirApresentacaoSeSolicitado();
   inicializarFirebaseOpcional();
 }
 

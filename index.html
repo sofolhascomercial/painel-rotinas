@@ -29,6 +29,10 @@
         <button id="adminToggle" class="btn btn-admin model-lock-btn" type="button" aria-label="Abrir área administrativa" onclick="window.PainelSF && window.PainelSF.abrirAdminModal()">
           <span class="lock-icon">🔒</span>
         </button>
+        <button id="presentationToggle" class="btn btn-filters model-icon-btn model-presentation-btn" type="button" aria-label="Abrir modo apresentação" onclick="window.PainelSF && window.PainelSF.abrirApresentacao()">
+          <span class="btn-icon">📺</span>
+          <span>Apresentação</span>
+        </button>
       </div>
       <div class="header-glow"></div>
     </header>
@@ -480,6 +484,38 @@
   </div>
 
 
+  <div id="presentationModal" class="presentation-modal hidden" aria-hidden="true">
+    <div class="presentation-overlay" onclick="window.PainelSF && window.PainelSF.fecharApresentacao()"></div>
+    <div class="presentation-stage">
+      <div class="presentation-topbar">
+        <div>
+          <span class="eyebrow">Modo apresentação</span>
+          <h2 id="presentationTitle">Resumo executivo</h2>
+          <p id="presentationSubtitle" class="presentation-subtitle">Painel automático para TV</p>
+        </div>
+        <div class="presentation-actions">
+          <button id="presentationPrev" class="btn btn-secondary presentation-btn" type="button">←</button>
+          <button id="presentationPlayPause" class="btn btn-primary presentation-btn" type="button">Pausar</button>
+          <button id="presentationNext" class="btn btn-secondary presentation-btn" type="button">→</button>
+          <button id="presentationFullscreen" class="btn btn-secondary presentation-btn" type="button">Tela cheia</button>
+          <button id="presentationClose" class="btn btn-secondary presentation-btn" type="button">Fechar</button>
+        </div>
+      </div>
+
+      <div class="presentation-meta-row">
+        <div id="presentationCounter" class="presentation-counter">Slide 1 de 1</div>
+        <div id="presentationPeriod" class="presentation-period">Resumo mensal</div>
+      </div>
+
+      <div id="presentationContent" class="presentation-content"></div>
+
+      <div class="presentation-footer">
+        <div id="presentationDots" class="presentation-dots"></div>
+        <div id="presentationFilters" class="presentation-filters"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="activeFiltersSummary" class="hidden"></div>
   <div id="consultaRotinaLojas" class="hidden"></div>
   <div id="datasetStatus" class="hidden"></div>
@@ -509,7 +545,13 @@ window.PainelSF = window.PainelSF || {
     }
   },
   aplicarFiltrosRapido(){ document.body.classList.remove('sidebar-open'); },
-  limparFiltrosRapido(){ document.querySelectorAll('#filtersSidebar input, #filtersSidebar select').forEach(el=>el.value=''); document.body.classList.remove('sidebar-open'); }
+  limparFiltrosRapido(){ document.querySelectorAll('#filtersSidebar input, #filtersSidebar select').forEach(el=>el.value=''); document.body.classList.remove('sidebar-open'); },
+  abrirApresentacao(){},
+  fecharApresentacao(){},
+  proximoSlideApresentacao(){},
+  slideAnteriorApresentacao(){},
+  alternarAutoplayApresentacao(){},
+  alternarFullscreenApresentacao(){}
 };
 </script>
 </body>
