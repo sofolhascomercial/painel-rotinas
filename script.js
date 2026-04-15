@@ -2211,6 +2211,18 @@ function classeExecucaoApresentacao(execucao) {
   return 'is-low';
 }
 
+function montarRodapeSlideApresentacao(indice, total) {
+  return `
+    <div class="presentation-slide-progress">
+      <div class="presentation-slide-progress-track">
+        <div class="presentation-slide-progress-fill" style="width:${((indice + 1) / Math.max(total, 1)) * 100}%"></div>
+      </div>
+      <div class="presentation-slide-progress-dots">
+        ${Array.from({ length: total }, (_, dotIndex) => `<span class="presentation-slide-progress-dot ${dotIndex === indice ? 'active' : ''}"></span>`).join('')}
+      </div>
+    </div>`;
+}
+
 function mensagemMetaApresentacao(execucao, meta = obterMetaApresentacao()) {
   if (execucao >= meta + 5) return 'ACIMA DA META';
   if (execucao >= meta) return 'META ATINGIDA';
@@ -2258,6 +2270,7 @@ function gerarSlidesApresentacao() {
   const progressoExecucao = Math.max(0, Math.min(kpis.execucao, 100));
   const progressoMeta = Math.max(0, Math.min((kpis.execucao / Math.max(meta, 1)) * 100, 100));
   const top3Formadores = formadores.slice(0, 3);
+  const totalSlidesApresentacao = 6;
 
   if (!dados.length) {
     return [{
@@ -2307,6 +2320,7 @@ function gerarSlidesApresentacao() {
           </article>
         </div>
         <div class="presentation-slide-caption">Resumo geral do período selecionado</div>
+        ${montarRodapeSlideApresentacao(0, totalSlidesApresentacao)}
       </div>`
   };
 
@@ -2349,6 +2363,7 @@ function gerarSlidesApresentacao() {
           </div>
         </div>
         <div class="presentation-slide-caption">${kpis.execucao >= meta ? 'Meta de execução atingida neste período' : 'Meta de execução não atingida neste período'}</div>
+        ${montarRodapeSlideApresentacao(1, totalSlidesApresentacao)}
       </div>`
   };
 
@@ -2383,6 +2398,7 @@ function gerarSlidesApresentacao() {
           }).join('')}
         </div>
         <div class="presentation-slide-caption">${top3Formadores[0] ? `${escaparHtml(top3Formadores[0].nome)} lidera o ranking atual` : 'Ranking atualizado automaticamente'}</div>
+        ${montarRodapeSlideApresentacao(2, totalSlidesApresentacao)}
       </div>`
   };
 
@@ -2405,6 +2421,7 @@ function gerarSlidesApresentacao() {
             </article>`).join('')}
         </div>
         <div class="presentation-slide-caption">Melhores lojas por desempenho dos formadores ativos</div>
+        ${montarRodapeSlideApresentacao(3, totalSlidesApresentacao)}
       </div>`
   };
 
@@ -2460,6 +2477,7 @@ function gerarSlidesApresentacao() {
             </div>
           </div>
         </div>
+        ${montarRodapeSlideApresentacao(4, totalSlidesApresentacao)}
       </div>`
   };
 
@@ -2473,6 +2491,7 @@ function gerarSlidesApresentacao() {
         <div class="presentation-panel presentation-calendar-shell">
           ${calendarioHtml || '<div class="presentation-empty">Sem calendário disponível para o período atual.</div>'}
         </div>
+        ${montarRodapeSlideApresentacao(5, totalSlidesApresentacao)}
       </div>`
   };
 
@@ -2545,12 +2564,6 @@ function abrirApresentacao({ auto = false } = {}) {
   document.body.classList.add('presentation-open');
   renderizarApresentacaoSeAberta();
   iniciarAutoplayApresentacao();
-  if (!auto) {
-    const stage = modal.querySelector('.presentation-stage');
-    if (stage?.requestFullscreen) {
-      stage.requestFullscreen().catch(() => {});
-    }
-  }
 }
 
 function fecharApresentacao() {
