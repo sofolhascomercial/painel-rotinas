@@ -2423,3 +2423,562 @@ body.presentation-open {
   .presentation-btn { min-width: 78px; font-size: 0.9rem; }
   .presentation-slide-visual { padding: 16px 18px 16px; }
 }
+
+/* ===== Ajuste definitivo: modo apresentação Conecta ===== */
+.presentation-stage {
+  padding: 0;
+  background:
+    radial-gradient(circle at top right, rgba(34,197,94,0.10), transparent 22%),
+    linear-gradient(180deg, #03050a 0%, #020409 100%);
+}
+.presentation-topbar {
+  top: 18px;
+  right: 18px;
+  gap: 10px;
+}
+.presentation-actions {
+  gap: 8px;
+}
+.presentation-btn {
+  min-width: 74px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-size: 0.86rem;
+  background: rgba(3, 7, 14, 0.38);
+  border-color: rgba(255,255,255,0.10);
+  backdrop-filter: blur(6px);
+}
+.presentation-stage:hover .presentation-btn,
+.presentation-stage:focus-within .presentation-btn {
+  background: rgba(3, 7, 14, 0.72);
+}
+.presentation-content {
+  padding: 18px;
+}
+.presentation-viewport {
+  width: 100%;
+  height: 100%;
+}
+.presentation-scale-box {
+  display: block;
+  transform-origin: center center;
+}
+.presentation-frame {
+  width: 1920px;
+  height: 1080px;
+}
+.presentation-conecta-slide {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 22px;
+  padding: 52px 60px 34px;
+  border-radius: 34px;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(34,197,94,0.22), transparent 0, transparent 24%),
+    radial-gradient(circle at 84% 32%, rgba(34,197,94,0.14), transparent 0, transparent 18%),
+    linear-gradient(180deg, rgba(4,11,18,0.98), rgba(2,7,12,0.99));
+}
+.presentation-conecta-slide::after {
+  inset: 14px;
+  border-radius: 28px;
+}
+.presentation-hero-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px 24px;
+  margin-bottom: 0;
+}
+.presentation-brand-block {
+  min-width: 0;
+}
+.presentation-brand-logo {
+  width: 430px;
+  max-width: 100%;
+}
+.presentation-clock-block {
+  min-width: 280px;
+  gap: 8px;
+}
+.presentation-clock-time {
+  font-size: 4.8rem;
+}
+.presentation-clock-date {
+  font-size: 1.55rem;
+}
+.presentation-title-block {
+  grid-column: 1 / -1;
+  gap: 12px;
+}
+.presentation-screen-title {
+  max-width: 1400px;
+  font-size: 4.7rem;
+  line-height: 0.94;
+}
+.presentation-title-meta-row {
+  gap: 16px;
+  align-items: center;
+}
+.presentation-period-pill {
+  min-height: 54px;
+  padding: 0 24px;
+  font-size: 1.35rem;
+}
+.presentation-period-value {
+  font-size: 1.55rem;
+}
+.presentation-stamp-row {
+  font-size: 1.3rem;
+}
+.presentation-summary-grid,
+.presentation-vs-grid,
+.presentation-podium-grid,
+.presentation-showcase-grid {
+  min-height: 0;
+  align-self: stretch;
+}
+.presentation-summary-grid {
+  gap: 18px;
+  align-self: end;
+}
+.presentation-summary-card {
+  min-height: 320px;
+  gap: 16px;
+  padding: 26px 22px 22px;
+  border-radius: 30px;
+}
+.presentation-summary-head {
+  font-size: 1.55rem;
+}
+.presentation-summary-icon {
+  font-size: 3.2rem;
+}
+.presentation-summary-value {
+  font-size: 5.1rem;
+}
+.presentation-summary-label {
+  font-size: 1.28rem;
+}
+.presentation-summary-ring {
+  width: 230px;
+  margin-top: 4px;
+}
+.presentation-summary-ring-value {
+  font-size: 3.3rem;
+}
+.presentation-summary-ring-label {
+  font-size: 1.12rem;
+}
+.presentation-vs-grid {
+  grid-template-columns: 420px minmax(0, 1fr);
+  gap: 28px;
+  align-items: center;
+}
+.presentation-vs-ring {
+  width: 410px;
+}
+.presentation-vs-panel {
+  gap: 22px;
+  padding: 34px 36px 26px;
+  border-radius: 32px;
+}
+.presentation-vs-status {
+  font-size: 4.1rem;
+}
+.presentation-vs-copy {
+  max-width: none;
+  font-size: 1.85rem;
+}
+.presentation-vs-meta-box {
+  min-width: 220px;
+}
+.presentation-vs-meta-title {
+  font-size: 1.35rem;
+}
+.presentation-vs-meta-value {
+  font-size: 5rem;
+}
+.presentation-vs-bar-track {
+  height: 42px;
+}
+.presentation-vs-bottom-row {
+  font-size: 1.55rem;
+}
+.presentation-vs-bottom-row strong {
+  font-size: 2.1rem;
+}
+.presentation-podium-grid {
+  gap: 26px;
+  min-height: 0;
+}
+.presentation-podium-card {
+  min-height: 420px;
+  gap: 16px;
+  padding: 74px 26px 24px;
+  border-radius: 30px;
+}
+.presentation-podium-card.gold {
+  min-height: 470px;
+}
+.presentation-podium-card.silver,
+.presentation-podium-card.bronze {
+  min-height: 390px;
+}
+.presentation-podium-crown {
+  top: -22px;
+  min-width: 120px;
+  height: 78px;
+  font-size: 3.2rem;
+}
+.presentation-podium-name {
+  font-size: 3rem;
+}
+.presentation-podium-value {
+  font-size: 6rem;
+}
+.presentation-podium-meta {
+  font-size: 1.8rem;
+}
+.presentation-podium-footer {
+  padding: 14px 16px;
+  font-size: 1.15rem;
+}
+.presentation-showcase-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+.presentation-showcase-card {
+  min-height: 0;
+  grid-template-rows: auto 104px auto auto auto;
+  align-content: start;
+  gap: 16px;
+  padding: 28px 24px 24px;
+  border-radius: 30px;
+}
+.presentation-showcase-formador {
+  font-size: 2.8rem;
+}
+.presentation-showcase-loja {
+  min-height: 104px;
+  max-height: 104px;
+  font-size: 2.05rem;
+  line-height: 1.08;
+  -webkit-line-clamp: 2;
+}
+.presentation-showcase-value {
+  font-size: 6.3rem;
+}
+.presentation-showcase-meta {
+  font-size: 1.7rem;
+}
+.presentation-showcase-badge {
+  min-height: 58px;
+  padding: 0 24px;
+  font-size: 1.28rem;
+}
+.presentation-slide-caption {
+  position: static;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  width: auto;
+  margin: 0;
+  padding-top: 0;
+  font-size: 1.42rem;
+}
+.presentation-slide-progress {
+  position: static;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.presentation-slide-progress-track {
+  height: 12px;
+}
+.presentation-slide-progress-dot {
+  width: 12px;
+  height: 12px;
+}
+.presentation-slide-progress-dot.active {
+  width: 18px;
+}
+
+.presentation-frame.is-conecta-compact .presentation-conecta-slide {
+  padding: 40px 44px 26px;
+  gap: 18px;
+}
+.presentation-frame.is-conecta-compact .presentation-brand-logo {
+  width: 360px;
+}
+.presentation-frame.is-conecta-compact .presentation-clock-time {
+  font-size: 4rem;
+}
+.presentation-frame.is-conecta-compact .presentation-clock-date {
+  font-size: 1.3rem;
+}
+.presentation-frame.is-conecta-compact .presentation-screen-title {
+  font-size: 3.95rem;
+}
+.presentation-frame.is-conecta-compact .presentation-period-pill {
+  min-height: 46px;
+  padding: 0 20px;
+  font-size: 1.12rem;
+}
+.presentation-frame.is-conecta-compact .presentation-period-value,
+.presentation-frame.is-conecta-compact .presentation-stamp-row {
+  font-size: 1.12rem;
+}
+.presentation-frame.is-conecta-compact .presentation-summary-card {
+  min-height: 270px;
+  padding: 22px 18px 18px;
+}
+.presentation-frame.is-conecta-compact .presentation-summary-head {
+  font-size: 1.3rem;
+}
+.presentation-frame.is-conecta-compact .presentation-summary-icon {
+  font-size: 2.7rem;
+}
+.presentation-frame.is-conecta-compact .presentation-summary-value {
+  font-size: 4.2rem;
+}
+.presentation-frame.is-conecta-compact .presentation-summary-label {
+  font-size: 1.08rem;
+}
+.presentation-frame.is-conecta-compact .presentation-summary-ring {
+  width: 190px;
+}
+.presentation-frame.is-conecta-compact .presentation-vs-grid {
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 24px;
+}
+.presentation-frame.is-conecta-compact .presentation-vs-ring {
+  width: 330px;
+}
+.presentation-frame.is-conecta-compact .presentation-vs-panel {
+  padding: 28px 30px 22px;
+}
+.presentation-frame.is-conecta-compact .presentation-vs-status {
+  font-size: 3.3rem;
+}
+.presentation-frame.is-conecta-compact .presentation-vs-copy {
+  font-size: 1.45rem;
+}
+.presentation-frame.is-conecta-compact .presentation-vs-meta-value {
+  font-size: 4.1rem;
+}
+.presentation-frame.is-conecta-compact .presentation-vs-bottom-row {
+  font-size: 1.28rem;
+}
+.presentation-frame.is-conecta-compact .presentation-vs-bottom-row strong {
+  font-size: 1.72rem;
+}
+.presentation-frame.is-conecta-compact .presentation-podium-card {
+  min-height: 340px;
+  padding: 64px 20px 20px;
+}
+.presentation-frame.is-conecta-compact .presentation-podium-card.gold {
+  min-height: 390px;
+}
+.presentation-frame.is-conecta-compact .presentation-podium-card.silver,
+.presentation-frame.is-conecta-compact .presentation-podium-card.bronze {
+  min-height: 320px;
+}
+.presentation-frame.is-conecta-compact .presentation-podium-name {
+  font-size: 2.4rem;
+}
+.presentation-frame.is-conecta-compact .presentation-podium-value {
+  font-size: 4.9rem;
+}
+.presentation-frame.is-conecta-compact .presentation-podium-meta {
+  font-size: 1.42rem;
+}
+.presentation-frame.is-conecta-compact .presentation-showcase-card {
+  grid-template-rows: auto 84px auto auto auto;
+  gap: 12px;
+  padding: 22px 18px 20px;
+}
+.presentation-frame.is-conecta-compact .presentation-showcase-formador {
+  font-size: 2.2rem;
+}
+.presentation-frame.is-conecta-compact .presentation-showcase-loja {
+  min-height: 84px;
+  max-height: 84px;
+  font-size: 1.55rem;
+}
+.presentation-frame.is-conecta-compact .presentation-showcase-value {
+  font-size: 4.9rem;
+}
+.presentation-frame.is-conecta-compact .presentation-showcase-meta {
+  font-size: 1.3rem;
+}
+.presentation-frame.is-conecta-compact .presentation-showcase-badge {
+  min-height: 50px;
+  font-size: 1.08rem;
+}
+.presentation-frame.is-conecta-tight .presentation-conecta-slide {
+  padding: 32px 34px 22px;
+  gap: 14px;
+}
+.presentation-frame.is-conecta-tight .presentation-brand-logo {
+  width: 300px;
+}
+.presentation-frame.is-conecta-tight .presentation-clock-time {
+  font-size: 3.2rem;
+}
+.presentation-frame.is-conecta-tight .presentation-clock-date {
+  font-size: 1.08rem;
+}
+.presentation-frame.is-conecta-tight .presentation-screen-title {
+  font-size: 3.2rem;
+}
+.presentation-frame.is-conecta-tight .presentation-period-pill {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 0.98rem;
+}
+.presentation-frame.is-conecta-tight .presentation-period-value,
+.presentation-frame.is-conecta-tight .presentation-stamp-row {
+  font-size: 0.98rem;
+}
+.presentation-frame.is-conecta-tight .presentation-summary-grid {
+  gap: 12px;
+}
+.presentation-frame.is-conecta-tight .presentation-summary-card {
+  min-height: 226px;
+  gap: 10px;
+  padding: 18px 14px 16px;
+}
+.presentation-frame.is-conecta-tight .presentation-summary-head {
+  font-size: 1.08rem;
+}
+.presentation-frame.is-conecta-tight .presentation-summary-icon {
+  font-size: 2.2rem;
+}
+.presentation-frame.is-conecta-tight .presentation-summary-value {
+  font-size: 3.4rem;
+}
+.presentation-frame.is-conecta-tight .presentation-summary-label {
+  font-size: 0.96rem;
+}
+.presentation-frame.is-conecta-tight .presentation-summary-ring {
+  width: 154px;
+}
+.presentation-frame.is-conecta-tight .presentation-summary-ring-value {
+  font-size: 2.4rem;
+}
+.presentation-frame.is-conecta-tight .presentation-vs-grid {
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+}
+.presentation-frame.is-conecta-tight .presentation-vs-ring {
+  width: 270px;
+}
+.presentation-frame.is-conecta-tight .presentation-vs-panel {
+  gap: 14px;
+  padding: 22px 22px 18px;
+}
+.presentation-frame.is-conecta-tight .presentation-vs-status {
+  font-size: 2.65rem;
+}
+.presentation-frame.is-conecta-tight .presentation-vs-copy {
+  font-size: 1.18rem;
+}
+.presentation-frame.is-conecta-tight .presentation-vs-meta-title {
+  font-size: 1rem;
+}
+.presentation-frame.is-conecta-tight .presentation-vs-meta-value {
+  font-size: 3.3rem;
+}
+.presentation-frame.is-conecta-tight .presentation-vs-bar-track {
+  height: 30px;
+}
+.presentation-frame.is-conecta-tight .presentation-vs-bottom-row {
+  font-size: 1.08rem;
+}
+.presentation-frame.is-conecta-tight .presentation-vs-bottom-row strong {
+  font-size: 1.45rem;
+}
+.presentation-frame.is-conecta-tight .presentation-podium-grid,
+.presentation-frame.is-conecta-tight .presentation-showcase-grid {
+  gap: 14px;
+}
+.presentation-frame.is-conecta-tight .presentation-podium-card {
+  min-height: 280px;
+  padding: 54px 16px 16px;
+}
+.presentation-frame.is-conecta-tight .presentation-podium-card.gold {
+  min-height: 320px;
+}
+.presentation-frame.is-conecta-tight .presentation-podium-card.silver,
+.presentation-frame.is-conecta-tight .presentation-podium-card.bronze {
+  min-height: 260px;
+}
+.presentation-frame.is-conecta-tight .presentation-podium-crown {
+  min-width: 92px;
+  height: 60px;
+  font-size: 2.4rem;
+}
+.presentation-frame.is-conecta-tight .presentation-podium-name {
+  font-size: 1.92rem;
+}
+.presentation-frame.is-conecta-tight .presentation-podium-value {
+  font-size: 4rem;
+}
+.presentation-frame.is-conecta-tight .presentation-podium-meta {
+  font-size: 1.16rem;
+}
+.presentation-frame.is-conecta-tight .presentation-podium-footer {
+  padding: 10px 12px;
+  font-size: 0.94rem;
+}
+.presentation-frame.is-conecta-tight .presentation-showcase-card {
+  grid-template-rows: auto 68px auto auto auto;
+  gap: 10px;
+  padding: 18px 14px 16px;
+}
+.presentation-frame.is-conecta-tight .presentation-showcase-formador {
+  font-size: 1.72rem;
+}
+.presentation-frame.is-conecta-tight .presentation-showcase-loja {
+  min-height: 68px;
+  max-height: 68px;
+  font-size: 1.24rem;
+}
+.presentation-frame.is-conecta-tight .presentation-showcase-value {
+  font-size: 4rem;
+}
+.presentation-frame.is-conecta-tight .presentation-showcase-meta {
+  font-size: 1.05rem;
+}
+.presentation-frame.is-conecta-tight .presentation-showcase-badge {
+  min-height: 42px;
+  padding: 0 16px;
+  font-size: 0.92rem;
+}
+.presentation-frame.is-conecta-tight .presentation-slide-caption {
+  font-size: 1.08rem;
+}
+.presentation-frame.is-conecta-tight .presentation-slide-progress-track {
+  height: 10px;
+}
+.presentation-frame.is-conecta-tight .presentation-slide-progress-dot {
+  width: 10px;
+  height: 10px;
+}
+.presentation-frame.is-conecta-tight .presentation-slide-progress-dot.active {
+  width: 14px;
+}
+
+/* Ajustes exclusivos da aba de importação */
+.routine-settings-block { margin-top: 20px; }
+.routine-settings-grid { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(360px, 1.35fr); gap: 18px; align-items: start; }
+.routine-settings-main { align-content: start; }
+.routine-settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.import-result-summary { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+.import-result-summary span { display: inline-flex; align-items: center; gap: 5px; padding: 8px 11px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.07); background: rgba(255,255,255,0.035); color: var(--muted); font-size: .88rem; }
+.import-result-summary strong { color: var(--text); }
+@media (max-width: 820px) {
+  .routine-settings-grid { grid-template-columns: 1fr; }
+  .routine-settings-fields { grid-template-columns: 1fr; }
+}

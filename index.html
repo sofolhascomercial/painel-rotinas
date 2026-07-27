@@ -374,13 +374,13 @@
                   <div>
                     <span class="eyebrow">Importação</span>
                     <h3>Atualizar base do painel</h3>
-                    <p class="admin-summary">Envie uma ou mais planilhas de rotinas para carregar os dados do painel. Ao excluir todas, o painel fica zerado.</p>
+                    <p class="admin-summary">Envie o relatório “Checklists Respondidos” do Moki. O sistema identifica as rotinas realizadas, gera as pendências e classifica os horários automaticamente.</p>
                   </div>
                 </div>
                 <label class="upload-box upload-box-large" for="fileInput">
                   <input id="fileInput" type="file" accept=".xlsx,.xlsm,.csv" multiple />
                   <span class="upload-title">Selecionar planilha</span>
-                  <span class="upload-subtitle">Formatos aceitos: XLSX, XLSM e CSV • você pode selecionar várias planilhas de uma vez • preferencialmente com aba “Rotinas”</span>
+                  <span class="upload-subtitle">Formatos aceitos: XLSX, XLSM e CSV • relatório “Checklists Respondidos” do Moki • você pode selecionar vários arquivos</span>
                 </label>
                 <div class="import-status-shell">
                   <div class="status-tag status-tag-soft">Importação de planilhas</div>
@@ -405,22 +405,62 @@
                 <div class="admin-highlight-grid">
                   <div class="admin-highlight-card">
                     <strong>Reconhecimento automático</strong>
-                    <span>A rede é lida pelo nome da loja e o formador fixo é mantido.</span>
+                    <span>O sistema lê checklist, loja, data e hora da realização.</span>
                   </div>
                   <div class="admin-highlight-card">
-                    <strong>Padronização</strong>
-                    <span>Nomes ajustados e vínculos salvos continuam valendo nas próximas importações.</span>
+                    <strong>Pendências automáticas</strong>
+                    <span>O que não aparecer no relatório é registrado como pendente.</span>
                   </div>
                   <div class="admin-highlight-card">
-                    <strong>Mais controle</strong>
-                    <span>Você importa a base e o painel já recalcula rankings, resumos e indicadores.</span>
+                    <strong>Base mais leve</strong>
+                    <span>Os dados brutos expiram em 5 dias, mas os resultados permanecem.</span>
                   </div>
                 </div>
+                <div class="admin-block routine-settings-block">
+                  <div class="section-head compact-head">
+                    <div>
+                      <span class="eyebrow">Regras das rotinas</span>
+                      <h3>Horários e tolerâncias</h3>
+                    </div>
+                  </div>
+                  <div class="routine-settings-grid">
+                    <div class="stack-fields routine-settings-main">
+                      <label class="field field-full">
+                        <span>Rotina</span>
+                        <select id="routineConfigSelect"></select>
+                      </label>
+                      <div id="routineConfigMeta" class="import-summary import-summary-strong">Selecione uma rotina para configurar.</div>
+                    </div>
+                    <div class="routine-settings-fields">
+                      <label class="field">
+                        <span>Horário de início</span>
+                        <input id="routineStartTime" type="time" />
+                      </label>
+                      <label class="field">
+                        <span>Horário de fim</span>
+                        <input id="routineEndTime" type="time" />
+                      </label>
+                      <label class="field">
+                        <span>Tolerância início (min)</span>
+                        <input id="routineStartTolerance" type="number" min="0" max="1440" step="1" />
+                      </label>
+                      <label class="field">
+                        <span>Tolerância fim (min)</span>
+                        <input id="routineEndTolerance" type="number" min="0" max="1440" step="1" />
+                      </label>
+                    </div>
+                  </div>
+                  <div class="import-actions">
+                    <button id="saveRoutineConfig" class="btn btn-primary" type="button">Salvar regra da rotina</button>
+                  </div>
+                  <div id="routineConfigFeedback" class="admin-feedback"></div>
+                </div>
+
                 <div class="admin-block history-block">
                   <div class="section-head compact-head">
                     <div>
                       <span class="eyebrow">Histórico</span>
-                      <h3>Planilhas já anexadas</h3>
+                      <h3>Importações processadas</h3>
                     </div>
                   </div>
                   <div id="historicoPlanilhas" class="history-stack"></div>

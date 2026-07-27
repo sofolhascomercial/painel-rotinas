@@ -41,6 +41,8 @@ const STORAGE_KEYS = {
   storeFormadorMap: 'sf_store_formador_map',
   storePromotorMap: 'sf_store_promotor_map',
   storeRenameMap: 'sf_store_rename_map',
+  routineConfig: 'sf_routine_config',
+  knownStores: 'sf_known_stores',
   importedSnapshots: 'sf_imported_snapshots',
   activeSnapshotId: 'sf_active_snapshot_id',
   appVersion: 'sf_app_version'
@@ -54,6 +56,40 @@ const ADMIN_CREDENTIALS = {
 const FORMADORES_ATIVOS = ['Luciano', 'Karina', 'Luana'];
 const FORMADORES_ATIVOS_SLUG = new Set(FORMADORES_ATIVOS.map((item) => slug(item)));
 const APP_STORAGE_VERSION = '2026-03-23-zero-base-v3';
+
+const PRAZO_DADOS_BRUTOS_DIAS = 5;
+const INTERVALO_LIMPEZA_DADOS_BRUTOS_MS = 60 * 60 * 1000;
+
+const ROTINAS_PADRAO = [
+  { id: 'rotina-01', nome: '01º Promotor - Fotos abertura do dia Até 6h30', nomeMoki: '01º Promotor - Fotos abertura do dia Até 6h30', horarioInicio: '', horarioFim: '06:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-02', nome: '02º Promotor - Rotina manhã Até 8h00', nomeMoki: '02º Promotor - Rotina manhã Até 8h00', horarioInicio: '', horarioFim: '08:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-03', nome: '03º Promotor -Inventário de entrada até 8h', nomeMoki: '03º Promotor -Inventário de entrada até 8h', horarioInicio: '', horarioFim: '08:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-04', nome: '04º Promotor - Montagem de Exposições Até 10h', nomeMoki: '04º Promotor - Montagem de Exposições Até 10h', horarioInicio: '', horarioFim: '10:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-05', nome: '05º Promotor - Pedidos e quebras Até 9h00', nomeMoki: '05º Promotor - Pedidos e quebras Até 9h00', horarioInicio: '', horarioFim: '09:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-06', nome: '06º Promotor - Reabastecimento 9:30hrs', nomeMoki: '06º Promotor - Reabastecimento 9:30hrs', horarioInicio: '', horarioFim: '09:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-07', nome: '07º Promotor - Reabastecimento 10:30hrs', nomeMoki: '07º Promotor - Reabastecimento 10:30hrs', horarioInicio: '', horarioFim: '10:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-08', nome: '08º Promotor- Triagem de Produtos', nomeMoki: '08º Promotor- Triagem de Produtos', horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-09', nome: '09ºPromotor - Relatório Fotográfico Até 11:30hrs', nomeMoki: '09ºPromotor - Relatório Fotográfico Até 11:30hrs', horarioInicio: '', horarioFim: '11:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-10', nome: '10° Inventário de saída  até 11:30', nomeMoki: '10° Inventário de saída  até 11:30', horarioInicio: '', horarioFim: '11:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-11', nome: '11º Promotor - Banca de Saída 11:45hrs', nomeMoki: '11º Promotor - Banca de Saída 11:45hrs', horarioInicio: '', horarioFim: '11:45', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-12', nome: '12º Promotor- Notas fiscais E Quebras', nomeMoki: '12º Promotor- Notas fiscais E Quebras', horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-segunda-limpeza', nome: 'Promotor - Limpeza das Bancas [2ª. FEIRA]', nomeMoki: 'Promotor - Limpeza das Bancas [2ª. FEIRA]', horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [1], escopo: 'todas', ativa: true },
+  { id: 'rotina-segunda-quinta-precos', nome: 'Promotor - Troca de Preços [2ª & 5ª FEIRA]', nomeMoki: 'Promotor - Troca de Preços [2ª & 5ª FEIRA]', horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [1,4], escopo: 'todas', ativa: true },
+  { id: 'rotina-12x36-inventario-saida', nome: 'Inventário de saída 12x36', nomeMoki: 'Inventário de saída 12x36', horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: '12x36', ativa: true },
+  { id: 'rotina-12x36-reab-14', nome: 'Reabastecimento 14:00h', nomeMoki: 'Reabastecimento 14:00h', horarioInicio: '', horarioFim: '14:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: '12x36', ativa: true },
+  { id: 'rotina-12x36-reab-16', nome: 'Reabastecimento 16:00h', nomeMoki: 'Reabastecimento 16:00h', horarioInicio: '', horarioFim: '16:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: '12x36', ativa: true },
+  { id: 'rotina-12x36-saida-1745', nome: 'Reabastecimento Saída Até 17:45', nomeMoki: 'Reabastecimento Saída Até 17:45', horarioInicio: '', horarioFim: '17:45', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: '12x36', ativa: true }
+];
+
+const LOJAS_FIXAS_12X36 = [
+  'DD ÁGUAS CLARAS',
+  'DD JD BOTÂNICO',
+  'DD SIA',
+  'COSTA T-63',
+  'COSTA JARDIM GOIÁS',
+  'COSTA SENADOR CANEDO',
+  'COSTA GOIÂNIA (ANEL VIÁRIO)'
+];
 
 const registrosSimulados = [];
 
@@ -152,6 +188,13 @@ const ALIASES_LOJAS = {
   'TT - CEILÂNDIA PSUL': ['TT - CEILANDIA PSUL'],
   'TT - LUZIÂNIA': ['TT - LUZIANIA'],
   'COMPER GAMA': ['G.P - 17 COMPER GAMA', 'GP 17 COMPER GAMA'],
+  'DD ÁGUAS CLARAS': ['DD AGUAS CLARAS', 'DIA A DIA AGUAS CLARAS', 'DIA A DIA ÁGUAS CLARAS'],
+  'DD JD BOTÂNICO': ['DD JD BOTANICO', 'DD JD. BOTANICO', 'DD JD BOTÃNICO', 'DIA A DIA JARDIM BOTANICO', 'DIA A DIA JARDIM BOTÂNICO'],
+  'DD SIA': ['DIA A DIA SIA'],
+  'COSTA T-63': ['COSTA T63', 'COSTA T 63'],
+  'COSTA JARDIM GOIÁS': ['COSTA JARDIM GOIAS', 'COSTA JD GOIAS', 'COSTA JD GOIÁS'],
+  'COSTA SENADOR CANEDO': ['COSTA SENADOR CANÊDO'],
+  'COSTA GOIÂNIA (ANEL VIÁRIO)': ['COSTA GOIANIA (ANEL VIARIO)', 'COSTA GOIANIA ANEL VIARIO', 'COSTA GOIÂNIA ANEL VIÁRIO', 'COSTA ANEL VIARIO', 'COSTA ANEL VIÁRIO'],
 };
 
 const lojaFormadorInicial = [...CADASTRO_LOJAS_FORMADORES];
@@ -235,6 +278,12 @@ migrarArmazenamentoSeNecessario();
 let lojaFormadorMap = sanitizarMapaFormadores({ ...defaultLojaFormadorMap, ...normalizarMapaChaves(carregarStore(STORAGE_KEYS.storeFormadorMap, {})) });
 let lojaPromotorMap = normalizarMapaChaves(carregarStore(STORAGE_KEYS.storePromotorMap, {}));
 let lojaRenameMap = normalizarMapaChaves({ ...defaultLojaRenameMap, ...carregarStore(STORAGE_KEYS.storeRenameMap, {}) });
+let configRotinas = normalizarConfiguracoesRotinas(carregarStore(STORAGE_KEYS.routineConfig, ROTINAS_PADRAO));
+let lojasConhecidas = new Set([
+  ...CADASTRO_LOJAS_FORMADORES.map(([loja]) => loja),
+  ...LOJAS_FIXAS_12X36,
+  ...carregarStore(STORAGE_KEYS.knownStores, [])
+].map((loja) => String(loja || '').trim()).filter(Boolean));
 let snapshotsImportados = carregarStore(STORAGE_KEYS.importedSnapshots, []);
 let registrosBase = normalizarBaseCompleta(registrosSimulados, 'simulada');
 let registros = [...registrosBase];
@@ -289,7 +338,14 @@ function persistirSnapshotsLocais() {
     importedAt: item.importedAt,
     total: item.total,
     latestDate: item.latestDate,
+    responsesCount: item.responsesCount || 0,
+    summary: item.summary || {},
+    rawExpiresAt: item.rawExpiresAt || '',
+    rawAvailable: item.rawAvailable !== false,
+    rawRowsCount: item.rawRowsCount || 0,
+    rawDeletedAt: item.rawDeletedAt || '',
     chunksCount: item.chunksCount || 0,
+    rawChunksCount: item.rawChunksCount || 0,
     schemaVersion: item.schemaVersion || (Array.isArray(item.data) && item.data.length ? 1 : 2)
   }));
 
@@ -348,6 +404,8 @@ async function salvarConfigNoFirebase() {
       storeFormadorMap: sanitizarMapaFormadores(lojaFormadorMap),
       storePromotorMap: lojaPromotorMap,
       storeRenameMap: lojaRenameMap,
+      routineConfig: configRotinas,
+      knownStores: [...lojasConhecidas].sort((a, b) => a.localeCompare(b, 'pt-BR')),
       updatedAt: new Date().toISOString()
     }, { merge: true });
     return true;
@@ -365,10 +423,10 @@ function dividirEmLotes(lista, tamanho = 200) {
   return lotes;
 }
 
-async function excluirChunksSnapshotNoFirebase(snapshotId) {
+async function excluirSubcolecaoSnapshotNoFirebase(snapshotId, nomeSubcolecao) {
   if (!firebaseDisponivel || !firebaseApi || !db) return;
 
-  const chunksRef = firebaseApi.collection(db, 'painel_snapshots', snapshotId, 'chunks');
+  const chunksRef = firebaseApi.collection(db, 'painel_snapshots', snapshotId, nomeSubcolecao);
   const chunksSnap = await firebaseApi.getDocs(chunksRef);
   const docs = chunksSnap.docs || [];
 
@@ -379,11 +437,36 @@ async function excluirChunksSnapshotNoFirebase(snapshotId) {
   }
 }
 
+async function excluirChunksSnapshotNoFirebase(snapshotId) {
+  return excluirSubcolecaoSnapshotNoFirebase(snapshotId, 'chunks');
+}
+
+async function excluirDadosBrutosSnapshotNoFirebase(snapshotId, atualizarMeta = true) {
+  if (!firebaseDisponivel || !firebaseApi || !db) return false;
+  try {
+    await excluirSubcolecaoSnapshotNoFirebase(snapshotId, 'raw_chunks');
+    if (atualizarMeta) {
+      await firebaseApi.setDoc(firebaseApi.doc(db, 'painel_snapshots', snapshotId), {
+        rawAvailable: false,
+        rawChunksCount: 0,
+        rawDeletedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+    return true;
+  } catch (error) {
+    console.error(`Erro ao excluir dados brutos do snapshot ${snapshotId}:`, error);
+    return false;
+  }
+}
+
 async function salvarSnapshotNoFirebase(snapshot) {
   if (!firebaseDisponivel || !firebaseApi || !db) return false;
   try {
-    const { data, ...meta } = snapshot;
+    const { data, rawData, ...meta } = snapshot;
     const lotes = dividirEmLotes(Array.isArray(data) ? data : [], 200);
+    const temRawData = Array.isArray(rawData);
+    const lotesRaw = temRawData ? dividirEmLotes(rawData, 200) : [];
 
     await excluirChunksSnapshotNoFirebase(snapshot.id);
 
@@ -402,13 +485,43 @@ async function salvarSnapshotNoFirebase(snapshot) {
       await batch.commit();
     }
 
-    await firebaseApi.setDoc(firebaseApi.doc(db, 'painel_snapshots', snapshot.id), {
+    if (temRawData) {
+      await excluirSubcolecaoSnapshotNoFirebase(snapshot.id, 'raw_chunks');
+      const expiraEm = snapshot.rawExpiresAt ? new Date(snapshot.rawExpiresAt) : new Date(Date.now() + PRAZO_DADOS_BRUTOS_DIAS * 86400000);
+
+      for (let i = 0; i < lotesRaw.length; i += 20) {
+        const batch = firebaseApi.writeBatch(db);
+        lotesRaw.slice(i, i + 20).forEach((lote, indiceInterno) => {
+          const indice = i + indiceInterno;
+          const chunkRef = firebaseApi.doc(db, 'painel_snapshots', snapshot.id, 'raw_chunks', `raw-${String(indice).padStart(4, '0')}`);
+          batch.set(chunkRef, {
+            index: indice,
+            rows: lote,
+            fileName: snapshot.fileName,
+            importedAt: snapshot.importedAt,
+            expiresAt: firebaseApi.Timestamp.fromDate(expiraEm)
+          });
+        });
+        await batch.commit();
+      }
+    }
+
+    const metaFinal = {
       ...meta,
       chunksCount: lotes.length,
-      schemaVersion: 2,
+      schemaVersion: 3,
       updatedAt: new Date().toISOString(),
       data: firebaseApi.deleteField()
-    }, { merge: true });
+    };
+
+    if (temRawData) {
+      metaFinal.rawChunksCount = lotesRaw.length;
+      metaFinal.rawRowsCount = rawData.length;
+      metaFinal.rawAvailable = true;
+      metaFinal.rawDeletedAt = '';
+    }
+
+    await firebaseApi.setDoc(firebaseApi.doc(db, 'painel_snapshots', snapshot.id), metaFinal, { merge: true });
     return true;
   } catch (error) {
     console.error('Erro ao salvar snapshot no Firebase:', error);
@@ -420,6 +533,7 @@ async function excluirSnapshotNoFirebase(snapshotId) {
   if (!firebaseDisponivel || !firebaseApi || !db) return false;
   try {
     await excluirChunksSnapshotNoFirebase(snapshotId);
+    await excluirSubcolecaoSnapshotNoFirebase(snapshotId, 'raw_chunks');
     await firebaseApi.deleteDoc(firebaseApi.doc(db, 'painel_snapshots', snapshotId));
     return true;
   } catch (error) {
@@ -428,10 +542,12 @@ async function excluirSnapshotNoFirebase(snapshotId) {
   }
 }
 
-async function limparSnapshotsNoFirebase() {
+async function limparSnapshotsNoFirebase(idsInformados = null) {
   if (!firebaseDisponivel || !firebaseApi || !db) return false;
   try {
-    const ids = [...new Set(snapshotsImportados.map((snapshot) => snapshot.id).filter(Boolean))];
+    const ids = Array.isArray(idsInformados)
+      ? [...new Set(idsInformados.filter(Boolean))]
+      : [...new Set(snapshotsImportados.map((snapshot) => snapshot.id).filter(Boolean))];
     for (const snapshotId of ids) {
       await excluirSnapshotNoFirebase(snapshotId);
     }
@@ -442,14 +558,24 @@ async function limparSnapshotsNoFirebase() {
   }
 }
 
+function valorDataParaIso(valor, fallback = '') {
+  if (typeof valor === 'string') return valor;
+  if (valor?.toDate) return valor.toDate().toISOString();
+  return fallback;
+}
+
 function normalizarSnapshotFirebase(snapshot) {
   return {
     ...snapshot,
-    importedAt: typeof snapshot.importedAt === 'string'
-      ? snapshot.importedAt
-      : (snapshot.importedAt?.toDate ? snapshot.importedAt.toDate().toISOString() : new Date().toISOString()),
+    importedAt: valorDataParaIso(snapshot.importedAt, new Date().toISOString()),
+    rawExpiresAt: valorDataParaIso(snapshot.rawExpiresAt, ''),
+    rawDeletedAt: valorDataParaIso(snapshot.rawDeletedAt, ''),
     data: Array.isArray(snapshot.data) ? snapshot.data : [],
     chunksCount: Number(snapshot.chunksCount || 0),
+    rawChunksCount: Number(snapshot.rawChunksCount || 0),
+    rawRowsCount: Number(snapshot.rawRowsCount || 0),
+    responsesCount: Number(snapshot.responsesCount || 0),
+    rawAvailable: snapshot.rawAvailable !== false,
     schemaVersion: Number(snapshot.schemaVersion || (Array.isArray(snapshot.data) && snapshot.data.length ? 1 : 2))
   };
 }
@@ -480,8 +606,50 @@ async function carregarDadosSnapshotNoFirebase(snapshot) {
   }
 }
 
+function dadosBrutosExpirados(snapshot, agora = Date.now()) {
+  if (!snapshot?.rawExpiresAt || snapshot.rawAvailable === false) return false;
+  const expira = new Date(snapshot.rawExpiresAt).getTime();
+  return Number.isFinite(expira) && expira <= agora;
+}
+
+async function limparDadosBrutosExpirados() {
+  const agora = Date.now();
+  const expirados = snapshotsImportados.filter((snapshot) => dadosBrutosExpirados(snapshot, agora));
+  if (!expirados.length) return 0;
+
+  let removidos = 0;
+  for (const snapshot of expirados) {
+    let removido = true;
+    if (firebaseDisponivel) {
+      removido = await excluirDadosBrutosSnapshotNoFirebase(snapshot.id, true);
+    }
+    if (!removido) continue;
+
+    snapshotsImportados = snapshotsImportados.map((item) => item.id === snapshot.id ? {
+      ...item,
+      rawData: undefined,
+      rawAvailable: false,
+      rawChunksCount: 0,
+      rawDeletedAt: new Date().toISOString()
+    } : item);
+    removidos += 1;
+  }
+
+  persistirSnapshotsLocais();
+  if (removidos) renderHistoricoPlanilhas();
+  return removidos;
+}
+
+function agendarLimpezaDadosBrutos() {
+  limparDadosBrutosExpirados();
+  window.setInterval(() => {
+    limparDadosBrutosExpirados();
+  }, INTERVALO_LIMPEZA_DADOS_BRUTOS_MS);
+}
+
 function aplicarEstadoRemoto() {
   atualizarBasePorSnapshots();
+  limparDadosBrutosExpirados();
 }
 
 function iniciarFirebaseSync() {
@@ -499,10 +667,14 @@ function iniciarFirebaseSync() {
       ...defaultLojaRenameMap,
       ...normalizarMapaChaves(remoto.storeRenameMap || lojaRenameMap)
     });
+    configRotinas = normalizarConfiguracoesRotinas(remoto.routineConfig || configRotinas);
+    (Array.isArray(remoto.knownStores) ? remoto.knownStores : []).forEach((loja) => lojasConhecidas.add(String(loja || '').trim()));
 
     salvarStore(STORAGE_KEYS.storeFormadorMap, lojaFormadorMap);
     salvarStore(STORAGE_KEYS.storePromotorMap, lojaPromotorMap);
     salvarStore(STORAGE_KEYS.storeRenameMap, lojaRenameMap);
+    salvarStore(STORAGE_KEYS.routineConfig, configRotinas);
+    salvarStore(STORAGE_KEYS.knownStores, [...lojasConhecidas].sort((a, b) => a.localeCompare(b, 'pt-BR')));
 
     firebaseConfigRecebida = true;
     if (firebaseInicializado) aplicarEstadoRemoto();
@@ -556,6 +728,231 @@ function tituloCaso(texto) {
     .filter(Boolean)
     .map((parte) => parte.charAt(0).toUpperCase() + parte.slice(1))
     .join(' ');
+}
+
+function normalizarConfiguracoesRotinas(configuracoes = []) {
+  const recebidas = new Map((Array.isArray(configuracoes) ? configuracoes : []).map((item) => [item.id, item]));
+  return ROTINAS_PADRAO.map((padrao) => {
+    const salvo = recebidas.get(padrao.id) || {};
+    return {
+      ...padrao,
+      ...salvo,
+      id: padrao.id,
+      nome: padrao.nome,
+      nomeMoki: String(salvo.nomeMoki || padrao.nomeMoki || padrao.nome).trim(),
+      horarioInicio: validarHorario(salvo.horarioInicio ?? padrao.horarioInicio),
+      horarioFim: validarHorario(salvo.horarioFim ?? padrao.horarioFim),
+      toleranciaInicioMin: limitarInteiro(salvo.toleranciaInicioMin ?? padrao.toleranciaInicioMin, 0, 1440),
+      toleranciaFimMin: limitarInteiro(salvo.toleranciaFimMin ?? padrao.toleranciaFimMin, 0, 1440),
+      dias: Array.isArray(padrao.dias) ? [...padrao.dias] : [0,1,2,3,4,5,6],
+      escopo: padrao.escopo,
+      ativa: salvo.ativa !== false
+    };
+  });
+}
+
+function limitarInteiro(valor, minimo = 0, maximo = Number.MAX_SAFE_INTEGER) {
+  const numero = Number.parseInt(valor, 10);
+  if (!Number.isFinite(numero)) return minimo;
+  return Math.max(minimo, Math.min(maximo, numero));
+}
+
+function validarHorario(valor) {
+  const texto = String(valor || '').trim();
+  const match = texto.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return '';
+  const hora = Number(match[1]);
+  const minuto = Number(match[2]);
+  if (hora < 0 || hora > 23 || minuto < 0 || minuto > 59) return '';
+  return `${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`;
+}
+
+function horarioParaMinutos(horario) {
+  const valido = validarHorario(horario);
+  if (!valido) return null;
+  const [hora, minuto] = valido.split(':').map(Number);
+  return hora * 60 + minuto;
+}
+
+function slugChecklist(texto) {
+  return slug(String(texto || '')
+    .replace(/[º°ª]/g, '')
+    .replace(/\bhoras?\b/gi, 'h')
+    .replace(/\bhrs?\b/gi, 'h')
+    .replace(/(\d{1,2})h(\d{2})\b/gi, '$1-$2')
+    .replace(/(\d{1,2}):(\d{2})/g, '$1-$2'));
+}
+
+function encontrarConfigRotinaPorNome(nome) {
+  const chave = slugChecklist(nome);
+  if (!chave) return null;
+  return configRotinas.find((rotina) => {
+    const candidatos = [rotina.nome, rotina.nomeMoki, ...(Array.isArray(rotina.aliases) ? rotina.aliases : [])];
+    return candidatos.some((item) => slugChecklist(item) === chave);
+  }) || null;
+}
+
+function obterConfigRotinaPorId(id) {
+  return configRotinas.find((item) => item.id === id) || null;
+}
+
+function dataIsoParaDate(dataIso) {
+  const match = String(dataIso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const data = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(data.getTime()) ? null : data;
+}
+
+function rotinaAplicaNaData(rotina, dataIso) {
+  if (!rotina?.ativa) return false;
+  const data = dataIsoParaDate(dataIso);
+  if (!data) return false;
+  return Array.isArray(rotina.dias) && rotina.dias.includes(data.getDay());
+}
+
+function lojaEh12x36(loja) {
+  const normalizada = renomearLojaSeNecessario(loja);
+  const chave = slug(normalizada);
+  return LOJAS_FIXAS_12X36.some((item) => slug(item) === chave);
+}
+
+function rotinaAplicaNaLoja(rotina, loja) {
+  return rotina?.escopo !== '12x36' || lojaEh12x36(loja);
+}
+
+function registrarLojasConhecidas(lojas = [], persistir = true) {
+  let alterou = false;
+  (Array.isArray(lojas) ? lojas : []).forEach((loja) => {
+    const normalizada = renomearLojaSeNecessario(String(loja || '').trim());
+    if (normalizada && !lojasConhecidas.has(normalizada)) {
+      lojasConhecidas.add(normalizada);
+      alterou = true;
+    }
+  });
+  if (alterou && persistir) {
+    salvarStore(STORAGE_KEYS.knownStores, [...lojasConhecidas].sort((a, b) => a.localeCompare(b, 'pt-BR')));
+    salvarConfigNoFirebase();
+  }
+  return alterou;
+}
+
+function formatarDiasRotina(dias = []) {
+  const todos = [0,1,2,3,4,5,6];
+  if (todos.every((dia) => dias.includes(dia))) return 'Todos os dias';
+  const nomes = { 0: 'Dom', 1: 'Seg', 2: 'Ter', 3: 'Qua', 4: 'Qui', 5: 'Sex', 6: 'Sáb' };
+  return dias.map((dia) => nomes[dia]).filter(Boolean).join(', ');
+}
+
+function formatarEscopoRotina(escopo) {
+  return escopo === '12x36' ? 'Somente lojas 12x36' : 'Todas as lojas';
+}
+
+function parseDataHoraMoki(valor, dataReferencia = '') {
+  if (!valor) return { data: formatarData(dataReferencia), hora: '', dataHoraIso: '' };
+
+  if (typeof valor === 'number') {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const data = new Date(excelEpoch.getTime() + valor * 86400000);
+    const dataIso = data.toISOString().slice(0, 10);
+    const hora = `${String(data.getUTCHours()).padStart(2, '0')}:${String(data.getUTCMinutes()).padStart(2, '0')}`;
+    return { data: dataIso, hora, dataHoraIso: `${dataIso}T${hora}:00` };
+  }
+
+  if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+    const dataIso = `${valor.getFullYear()}-${String(valor.getMonth() + 1).padStart(2, '0')}-${String(valor.getDate()).padStart(2, '0')}`;
+    const hora = `${String(valor.getHours()).padStart(2, '0')}:${String(valor.getMinutes()).padStart(2, '0')}`;
+    return { data: dataIso, hora, dataHoraIso: `${dataIso}T${hora}:00` };
+  }
+
+  const texto = String(valor).trim();
+  const br = texto.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (br) {
+    const ano = br[3].length === 2 ? `20${br[3]}` : br[3];
+    const data = `${ano.padStart(4, '0')}-${br[2].padStart(2, '0')}-${br[1].padStart(2, '0')}`;
+    const hora = br[4] !== undefined ? `${String(br[4]).padStart(2, '0')}:${String(br[5]).padStart(2, '0')}` : '';
+    return { data, hora, dataHoraIso: hora ? `${data}T${hora}:${String(br[6] || '00').padStart(2, '0')}` : '' };
+  }
+
+  const data = formatarData(dataReferencia || texto);
+  const horaMatch = texto.match(/(?:T|\s)(\d{1,2}):(\d{2})/);
+  const hora = horaMatch ? `${horaMatch[1].padStart(2, '0')}:${horaMatch[2]}` : '';
+  return { data, hora, dataHoraIso: data && hora ? `${data}T${hora}:00` : '' };
+}
+
+function classificarPontualidade(rotina, horaRealizada, status = 'realizada') {
+  if (normalizarStatus(status) !== 'realizada') {
+    return {
+      statusDetalhado: 'pendente',
+      pontualidade: 'pendente',
+      pontualidadeLabel: 'Pendente',
+      minutosAtraso: 0,
+      minutosAntes: 0
+    };
+  }
+
+  const realizado = horarioParaMinutos(horaRealizada);
+  const inicio = horarioParaMinutos(rotina?.horarioInicio);
+  const fim = horarioParaMinutos(rotina?.horarioFim);
+  const toleranciaInicio = limitarInteiro(rotina?.toleranciaInicioMin, 0, 1440);
+  const toleranciaFim = limitarInteiro(rotina?.toleranciaFimMin, 0, 1440);
+
+  if (realizado === null || (inicio === null && fim === null)) {
+    return {
+      statusDetalhado: 'realizada_sem_horario',
+      pontualidade: 'sem_regra',
+      pontualidadeLabel: 'Realizada • horário não configurado',
+      minutosAtraso: 0,
+      minutosAntes: 0
+    };
+  }
+
+  if (inicio !== null && realizado < inicio - toleranciaInicio) {
+    return {
+      statusDetalhado: 'realizada_antes_do_horario',
+      pontualidade: 'antes_horario',
+      pontualidadeLabel: 'Realizada antes do horário',
+      minutosAtraso: 0,
+      minutosAntes: inicio - realizado
+    };
+  }
+
+  if (inicio !== null && realizado < inicio) {
+    return {
+      statusDetalhado: 'realizada_tolerancia_inicio',
+      pontualidade: 'tolerancia_inicio',
+      pontualidadeLabel: 'Realizada na tolerância inicial',
+      minutosAtraso: 0,
+      minutosAntes: inicio - realizado
+    };
+  }
+
+  if (fim !== null && realizado > fim + toleranciaFim) {
+    return {
+      statusDetalhado: 'realizada_em_atraso',
+      pontualidade: 'atrasada',
+      pontualidadeLabel: 'Realizada em atraso',
+      minutosAtraso: realizado - fim,
+      minutosAntes: 0
+    };
+  }
+
+  if (fim !== null && realizado > fim) {
+    return {
+      statusDetalhado: 'realizada_tolerancia_fim',
+      pontualidade: 'tolerancia_fim',
+      pontualidadeLabel: 'Realizada na tolerância final',
+      minutosAtraso: realizado - fim,
+      minutosAntes: 0
+    };
+  }
+
+  return {
+    statusDetalhado: 'realizada_no_prazo',
+    pontualidade: 'no_prazo',
+    pontualidadeLabel: 'Realizada no prazo',
+    minutosAtraso: 0,
+    minutosAntes: 0
+  };
 }
 
 function normalizarStatus(status) {
@@ -667,7 +1064,13 @@ function resolverPromotor(loja, promotorPlanilha = '', mapaPromotores = new Map(
 function enriquecerRegistro(base, index, mapaFormadores = new Map(), mapaPromotores = new Map()) {
   const lojaTratada = renomearLojaSeNecessario(base.loja);
   const lojaInfo = parseLoja(lojaTratada, base.redesMap || {});
+  const rotinaNome = String(base.rotina || '').trim();
+  const status = normalizarStatus(base.status);
+  const rotinaConfig = obterConfigRotinaPorId(base.rotinaId) || encontrarConfigRotinaPorNome(rotinaNome);
+  const pontualidade = classificarPontualidade(rotinaConfig, base.horaRealizada, status);
+
   return {
+    ...base,
     id: base.id || `reg-${index + 1}`,
     data: formatarData(base.data),
     rede: base.rede || lojaInfo.rede,
@@ -675,8 +1078,15 @@ function enriquecerRegistro(base, index, mapaFormadores = new Map(), mapaPromoto
     unidade: base.unidade || lojaInfo.unidade,
     formador: resolverFormador(lojaInfo.loja, base.formador, mapaFormadores),
     promotor: resolverPromotor(lojaInfo.loja, base.promotor, mapaPromotores),
-    rotina: String(base.rotina || '').trim(),
-    status: normalizarStatus(base.status)
+    rotina: rotinaConfig?.nome || rotinaNome,
+    rotinaId: rotinaConfig?.id || base.rotinaId || '',
+    status,
+    horaRealizada: validarHorario(base.horaRealizada),
+    horarioInicioPrevisto: rotinaConfig?.horarioInicio || '',
+    horarioFimPrevisto: rotinaConfig?.horarioFim || '',
+    toleranciaInicioMin: rotinaConfig?.toleranciaInicioMin ?? 0,
+    toleranciaFimMin: rotinaConfig?.toleranciaFimMin ?? 0,
+    ...pontualidade
   };
 }
 
@@ -687,10 +1097,17 @@ function normalizarBaseCompleta(base, origem = 'simulada', mapaFormadores = new 
     .map((item) => ({ ...item, origem }));
 }
 
-function obterLojasConhecidas() {
+function obterLojasConhecidas(lojasExtras = []) {
   const lojasRegistros = registrosBase.map((item) => item.loja);
   const lojasVinculadas = lojaFormadorInicial.map(([loja]) => loja);
-  return [...new Set([...lojasVinculadas, ...lojasRegistros])].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  return [...new Set([
+    ...lojasConhecidas,
+    ...lojasVinculadas,
+    ...LOJAS_FIXAS_12X36,
+    ...lojasRegistros,
+    ...(Array.isArray(lojasExtras) ? lojasExtras : [])
+  ].map((loja) => renomearLojaSeNecessario(loja)).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 
 function preencherSelect(select, valores, placeholder) {
@@ -1245,10 +1662,18 @@ function limparFiltros() {
 
 function consolidarSnapshotsImportados() {
   if (!snapshotsImportados.length) return [];
-  return normalizarBaseCompleta(
-    snapshotsImportados.flatMap((item) => Array.isArray(item.data) ? item.data : []),
-    'importada'
-  );
+  const ordenados = [...snapshotsImportados].sort((a, b) => new Date(a.importedAt || 0) - new Date(b.importedAt || 0));
+  const mapa = new Map();
+
+  ordenados.forEach((snapshot) => {
+    const dados = normalizarBaseCompleta(Array.isArray(snapshot.data) ? snapshot.data : [], 'importada');
+    dados.forEach((item) => {
+      const chave = `${item.data}||${slug(item.loja)}||${item.rotinaId || slugChecklist(item.rotina)}`;
+      mapa.set(chave, item);
+    });
+  });
+
+  return [...mapa.values()];
 }
 
 function aplicarBase(base, origem = 'simulada', detalhe = '') {
@@ -1329,39 +1754,252 @@ function inferirRedesPorAba(linhasRedes) {
   return mapa;
 }
 
-function normalizarRegistrosImportados(sheets) {
-  const linhasRotinas = sheets['Rotinas'] || Object.values(sheets)[0] || [];
-  if (!linhasRotinas.length) throw new Error('A planilha está vazia.');
+function localizarCabecalhoMoki(linhas = []) {
+  for (let index = 0; index < Math.min(linhas.length, 30); index += 1) {
+    const cabecalho = (linhas[index] || []).map((item) => slug(item));
+    const temChecklist = cabecalho.includes('checklist');
+    const temLoja = cabecalho.includes('nome-da-unidade') || cabecalho.includes('unidade');
+    const temData = cabecalho.includes('data-de-referencia') || cabecalho.includes('data-de-inicio');
+    if (temChecklist && temLoja && temData) {
+      return { index, cabecalho };
+    }
+  }
+  return null;
+}
 
-  const cabecalho = linhasRotinas[0].map((item) => String(item || '').trim().toLowerCase());
-  const redesMap = inferirRedesPorAba(sheets['Redes Disponíveis']);
-  const formadoresMap = inferirFormadoresPorAba(sheets.Formadores);
-  const promotoresMap = inferirPromotoresPorAba(sheets);
+function encontrarIndiceCabecalho(cabecalho, candidatos = []) {
+  return cabecalho.findIndex((item) => candidatos.includes(item));
+}
 
-  const idxData = cabecalho.findIndex((item) => item.includes('data'));
-  const idxRotina = cabecalho.findIndex((item) => item.includes('checklist') || item.includes('rotina'));
-  const idxLoja = cabecalho.findIndex((item) => item.includes('unidade') || item.includes('loja'));
-  const idxStatus = cabecalho.findIndex((item) => item.includes('situa') || item.includes('status'));
-  const idxResponsavel = cabecalho.findIndex((item) => item.includes('departamento') || item.includes('formador') || item.includes('respons'));
-  const idxPromotor = cabecalho.findIndex((item) => item.includes('promotor'));
+function extrairRespostasMoki(sheets) {
+  const nomeAba = Object.keys(sheets).find((nome) => slug(nome).includes('checklists-respondidos'))
+    || Object.keys(sheets).find((nome) => slug(nome).includes('checklist'))
+    || Object.keys(sheets)[0];
+  const linhas = sheets[nomeAba] || [];
+  if (!linhas.length) throw new Error('A planilha está vazia.');
 
-  if ([idxData, idxRotina, idxLoja, idxStatus].some((idx) => idx < 0)) {
-    throw new Error('Não foi possível localizar as colunas obrigatórias de data, rotina, loja e status.');
+  const cabecalhoInfo = localizarCabecalhoMoki(linhas);
+  if (!cabecalhoInfo) {
+    throw new Error('Não foi possível localizar as colunas do relatório “Checklists Respondidos” do Moki.');
   }
 
-  const registrosImportados = linhasRotinas.slice(1).map((linha, index) => {
-    const data = formatarData(linha[idxData]);
-    const rotina = String(linha[idxRotina] || '').trim();
-    const lojaOriginal = String(linha[idxLoja] || '').trim();
-    const status = normalizarStatus(linha[idxStatus]);
-    const formadorLinha = idxResponsavel >= 0 ? String(linha[idxResponsavel] || '').trim() : '';
-    const promotorLinha = idxPromotor >= 0 ? String(linha[idxPromotor] || '').trim() : '';
-    if (!data || !rotina || !lojaOriginal || !status) return null;
-    return enriquecerRegistro({ id: `imp-${index + 1}`, data, loja: lojaOriginal, rotina, status, formador: formadorLinha, promotor: promotorLinha, redesMap }, index, formadoresMap, promotoresMap);
-  }).filter(Boolean);
+  const { index: linhaCabecalho, cabecalho } = cabecalhoInfo;
+  const idxId = encontrarIndiceCabecalho(cabecalho, ['id']);
+  const idxChecklist = encontrarIndiceCabecalho(cabecalho, ['checklist']);
+  const idxDataReferencia = encontrarIndiceCabecalho(cabecalho, ['data-de-referencia']);
+  const idxDataInicio = encontrarIndiceCabecalho(cabecalho, ['data-de-inicio']);
+  const idxNomeUnidade = encontrarIndiceCabecalho(cabecalho, ['nome-da-unidade']);
+  const idxUnidade = encontrarIndiceCabecalho(cabecalho, ['unidade']);
+  const idxCodigoUnidade = encontrarIndiceCabecalho(cabecalho, ['cod-da-unidade', 'codigo-da-unidade']);
+  const idxAutor = encontrarIndiceCabecalho(cabecalho, ['autor']);
 
-  if (!registrosImportados.length) throw new Error('Nenhum registro válido foi encontrado na aba de rotinas.');
-  return registrosImportados;
+  if ([idxChecklist, idxDataInicio].some((idx) => idx < 0) || (idxNomeUnidade < 0 && idxUnidade < 0)) {
+    throw new Error('A planilha precisa conter CHECKLIST, DATA DE INÍCIO e NOME DA UNIDADE.');
+  }
+
+  const respostas = [];
+  const naoReconhecidos = [];
+  const linhasInvalidas = [];
+  const rawData = [];
+
+  linhas.slice(linhaCabecalho + 1).forEach((linha, index) => {
+    if (!Array.isArray(linha) || !linha.some((valor) => String(valor ?? '').trim())) return;
+
+    const checklistOriginal = String(linha[idxChecklist] || '').trim();
+    const lojaOriginal = String(
+      (idxNomeUnidade >= 0 ? linha[idxNomeUnidade] : '')
+      || (idxUnidade >= 0 ? linha[idxUnidade] : '')
+      || ''
+    ).trim();
+    const dataReferenciaOriginal = idxDataReferencia >= 0 ? linha[idxDataReferencia] : '';
+    const dataInicioOriginal = linha[idxDataInicio];
+    const autor = idxAutor >= 0 ? String(linha[idxAutor] || '').trim() : '';
+    const codigoUnidade = idxCodigoUnidade >= 0 ? String(linha[idxCodigoUnidade] || '').trim() : '';
+    const idMoki = idxId >= 0 ? String(linha[idxId] || '').trim() : '';
+    const dataHora = parseDataHoraMoki(dataInicioOriginal, dataReferenciaOriginal);
+    const data = formatarData(dataReferenciaOriginal) || dataHora.data;
+    const loja = renomearLojaSeNecessario(lojaOriginal);
+    const rotinaConfig = encontrarConfigRotinaPorNome(checklistOriginal);
+
+    const raw = {
+      idMoki,
+      data,
+      checklist: checklistOriginal,
+      loja,
+      codigoUnidade,
+      dataHoraRealizada: dataHora.dataHoraIso,
+      horaRealizada: dataHora.hora,
+      autor
+    };
+
+    if (!data || !checklistOriginal || !loja || !dataHora.hora) {
+      linhasInvalidas.push({ linha: linhaCabecalho + index + 2, ...raw });
+      return;
+    }
+
+    rawData.push(raw);
+
+    if (!rotinaConfig) {
+      naoReconhecidos.push(raw);
+      return;
+    }
+
+    respostas.push({
+      ...raw,
+      rotina: rotinaConfig.nome,
+      rotinaId: rotinaConfig.id,
+      promotor: autor
+    });
+  });
+
+  if (!rawData.length) {
+    throw new Error('Nenhuma resposta válida foi encontrada no relatório do Moki.');
+  }
+
+  return {
+    nomeAba,
+    linhaCabecalho,
+    respostas,
+    naoReconhecidos,
+    linhasInvalidas,
+    rawData
+  };
+}
+
+function chaveResposta(data, loja, rotinaId) {
+  return `${data}||${slug(renomearLojaSeNecessario(loja))}||${rotinaId}`;
+}
+
+function escolherRespostaMaisAntiga(atual, candidata) {
+  if (!atual) return candidata;
+  const atualMin = horarioParaMinutos(atual.horaRealizada);
+  const candidataMin = horarioParaMinutos(candidata.horaRealizada);
+  if (atualMin === null) return candidata;
+  if (candidataMin === null) return atual;
+  return candidataMin < atualMin ? candidata : atual;
+}
+
+function mesclarRespostas(respostas = []) {
+  const mapa = new Map();
+  respostas.forEach((resposta) => {
+    if (!resposta?.data || !resposta?.loja || !resposta?.rotinaId) return;
+    const chave = chaveResposta(resposta.data, resposta.loja, resposta.rotinaId);
+    mapa.set(chave, escolherRespostaMaisAntiga(mapa.get(chave), resposta));
+  });
+  return [...mapa.values()];
+}
+
+function obterRespostasAnteriores(data) {
+  return consolidarSnapshotsImportados()
+    .filter((item) => item.data === data && item.status === 'realizada' && item.rotinaId)
+    .map((item) => ({
+      data: item.data,
+      checklist: item.checklistOriginal || item.rotina,
+      loja: item.loja,
+      rotina: item.rotina,
+      rotinaId: item.rotinaId,
+      dataHoraRealizada: item.dataHoraRealizada || (item.horaRealizada ? `${item.data}T${item.horaRealizada}:00` : ''),
+      horaRealizada: item.horaRealizada,
+      autor: item.autor || item.promotor || '',
+      promotor: item.promotor || item.autor || ''
+    }));
+}
+
+function gerarResultadosParaData(data, respostasNovas = [], lojasExtras = []) {
+  const respostas = mesclarRespostas([...obterRespostasAnteriores(data), ...respostasNovas.filter((item) => item.data === data)]);
+  const lojasDasRespostas = respostas.map((item) => item.loja);
+  const lojas = obterLojasConhecidas([...lojasExtras, ...lojasDasRespostas]);
+  const mapaRespostas = new Map(respostas.map((item) => [chaveResposta(item.data, item.loja, item.rotinaId), item]));
+  const resultados = [];
+  const foraDaProgramacao = [];
+
+  respostas.forEach((resposta) => {
+    const rotina = obterConfigRotinaPorId(resposta.rotinaId);
+    if (!rotina || !rotinaAplicaNaData(rotina, data) || !rotinaAplicaNaLoja(rotina, resposta.loja)) {
+      foraDaProgramacao.push(resposta);
+    }
+  });
+
+  configRotinas.filter((rotina) => rotinaAplicaNaData(rotina, data)).forEach((rotina) => {
+    lojas.filter((loja) => rotinaAplicaNaLoja(rotina, loja)).forEach((loja, index) => {
+      const resposta = mapaRespostas.get(chaveResposta(data, loja, rotina.id));
+      const status = resposta ? 'realizada' : 'pendente';
+      const pontualidade = classificarPontualidade(rotina, resposta?.horaRealizada || '', status);
+      const lojaNormalizada = renomearLojaSeNecessario(loja);
+      const lojaInfo = parseLoja(lojaNormalizada);
+
+      resultados.push({
+        id: `resultado-${data}-${slug(lojaNormalizada)}-${rotina.id}`,
+        data,
+        rede: lojaInfo.rede,
+        loja: lojaInfo.loja,
+        unidade: lojaInfo.unidade,
+        formador: resolverFormador(lojaInfo.loja),
+        promotor: resposta?.promotor || resposta?.autor || resolverPromotor(lojaInfo.loja),
+        autor: resposta?.autor || '',
+        rotina: rotina.nome,
+        rotinaId: rotina.id,
+        checklistOriginal: resposta?.checklist || rotina.nomeMoki,
+        status,
+        dataHoraRealizada: resposta?.dataHoraRealizada || '',
+        horaRealizada: resposta?.horaRealizada || '',
+        horarioInicioPrevisto: rotina.horarioInicio,
+        horarioFimPrevisto: rotina.horarioFim,
+        toleranciaInicioMin: rotina.toleranciaInicioMin,
+        toleranciaFimMin: rotina.toleranciaFimMin,
+        escopoRotina: rotina.escopo,
+        diasRotina: rotina.dias,
+        ...pontualidade,
+        origem: 'importada'
+      });
+    });
+  });
+
+  return { resultados, foraDaProgramacao };
+}
+
+function resumirResultadosImportacao(resultados = []) {
+  return {
+    previstas: resultados.length,
+    realizadas: resultados.filter((item) => item.status === 'realizada').length,
+    pendentes: resultados.filter((item) => item.status === 'pendente').length,
+    noPrazo: resultados.filter((item) => item.pontualidade === 'no_prazo').length,
+    toleranciaInicio: resultados.filter((item) => item.pontualidade === 'tolerancia_inicio').length,
+    toleranciaFim: resultados.filter((item) => item.pontualidade === 'tolerancia_fim').length,
+    atrasadas: resultados.filter((item) => item.pontualidade === 'atrasada').length,
+    antesHorario: resultados.filter((item) => item.pontualidade === 'antes_horario').length,
+    semHorario: resultados.filter((item) => item.pontualidade === 'sem_regra').length
+  };
+}
+
+function processarPlanilhaMoki(sheets) {
+  const extracao = extrairRespostasMoki(sheets);
+  const datas = [...new Set(extracao.respostas.map((item) => item.data).filter(Boolean))].sort();
+  if (!datas.length) {
+    throw new Error('Nenhuma resposta corresponde às rotinas cadastradas no sistema.');
+  }
+
+  const lojasExtras = extracao.respostas.map((item) => item.loja);
+  const resultados = [];
+  const foraDaProgramacao = [];
+
+  datas.forEach((data) => {
+    const gerado = gerarResultadosParaData(data, extracao.respostas, lojasExtras);
+    resultados.push(...gerado.resultados);
+    foraDaProgramacao.push(...gerado.foraDaProgramacao);
+  });
+
+  return {
+    ...extracao,
+    datas,
+    resultados,
+    foraDaProgramacao,
+    resumo: resumirResultadosImportacao(resultados)
+  };
+}
+
+function normalizarRegistrosImportados(sheets) {
+  return processarPlanilhaMoki(sheets).resultados;
 }
 
 function parseCsv(texto) {
@@ -1511,12 +2149,23 @@ function obterNomeAbaRotinas(sheets = {}) {
   return Object.keys(sheets).find((nome) => slug(nome).includes('rotina')) || Object.keys(sheets)[0] || '';
 }
 
-function gerarLinhasPreview(linhas = [], limite = 6) {
-  const limpas = (linhas || []).filter((linha) => Array.isArray(linha) && linha.some((coluna) => String(coluna || '').trim()));
-  if (!limpas.length) return { cabecalho: [], linhas: [] };
-  const cabecalho = limpas[0].slice(0, 6).map((item) => String(item || '').trim());
-  const preview = limpas.slice(1, limite + 1).map((linha) => linha.slice(0, 6).map((item) => String(item ?? '').trim()));
-  return { cabecalho, linhas: preview };
+function gerarLinhasPreviewMoki(processamento, limite = 8) {
+  const mapaResultados = new Map(
+    processamento.resultados
+      .filter((item) => item.status === 'realizada')
+      .map((item) => [chaveResposta(item.data, item.loja, item.rotinaId), item])
+  );
+
+  return processamento.respostas.slice(0, limite).map((resposta) => {
+    const resultado = mapaResultados.get(chaveResposta(resposta.data, resposta.loja, resposta.rotinaId));
+    return {
+      data: resposta.data.split('-').reverse().join('/'),
+      checklist: resposta.rotina,
+      loja: resposta.loja,
+      hora: resposta.horaRealizada,
+      resultado: resultado?.pontualidadeLabel || 'Realizada'
+    };
+  });
 }
 
 function renderizarPreviewImportacao() {
@@ -1526,7 +2175,7 @@ function renderizarPreviewImportacao() {
 
   if (!previewsImportacao.length) {
     resumo.textContent = 'Nenhuma planilha selecionada.';
-    container.innerHTML = '<div class="empty-state">Selecione uma ou mais planilhas para visualizar a prévia antes de importar.</div>';
+    container.innerHTML = '<div class="empty-state">Selecione uma ou mais planilhas Moki para visualizar a prévia antes de importar.</div>';
     return;
   }
 
@@ -1538,23 +2187,43 @@ function renderizarPreviewImportacao() {
       return `<div class="preview-card preview-card-error"><div class="preview-card-head"><strong>${escaparHtml(item.fileName)}</strong><span class="status-tag">Falha na leitura</span></div><div class="admin-feedback">${escaparHtml(item.error)}</div></div>`;
     }
 
-    const head = item.preview.cabecalho.length
-      ? `<thead><tr>${item.preview.cabecalho.map((coluna) => `<th>${escaparHtml(coluna || 'Coluna')}</th>`).join('')}</tr></thead>`
-      : '';
-    const body = item.preview.linhas.length
-      ? `<tbody>${item.preview.linhas.map((linha) => `<tr>${linha.map((coluna) => `<td>${escaparHtml(coluna)}</td>`).join('')}</tr>`).join('')}</tbody>`
-      : '<tbody><tr><td colspan="6">Sem linhas para pré-visualizar.</td></tr></tbody>';
+    const resumoItem = item.processamento.resumo;
+    const linhasPreview = gerarLinhasPreviewMoki(item.processamento);
+    const body = linhasPreview.length
+      ? `<tbody>${linhasPreview.map((linha) => `<tr>
+          <td>${escaparHtml(linha.data)}</td>
+          <td>${escaparHtml(linha.checklist)}</td>
+          <td>${escaparHtml(linha.loja)}</td>
+          <td>${escaparHtml(linha.hora)}</td>
+          <td>${escaparHtml(linha.resultado)}</td>
+        </tr>`).join('')}</tbody>`
+      : '<tbody><tr><td colspan="5">Sem respostas reconhecidas para pré-visualizar.</td></tr></tbody>';
+
+    const avisos = [];
+    if (item.processamento.naoReconhecidos.length) avisos.push(`${item.processamento.naoReconhecidos.length} checklist(s) não reconhecido(s)`);
+    if (item.processamento.linhasInvalidas.length) avisos.push(`${item.processamento.linhasInvalidas.length} linha(s) inválida(s)`);
+    if (item.processamento.foraDaProgramacao.length) avisos.push(`${item.processamento.foraDaProgramacao.length} resposta(s) fora da programação`);
 
     return `<div class="preview-card">
       <div class="preview-card-head">
         <div>
           <strong>${escaparHtml(item.fileName)}</strong>
-          <div class="preview-meta">${item.total} registro(s) reconhecido(s) • aba ${escaparHtml(item.sheetName || 'principal')} • última data ${escaparHtml(item.latestDate || '--')}</div>
+          <div class="preview-meta">${item.processamento.respostas.length} resposta(s) reconhecida(s) • ${item.processamento.datas.length} data(s) • aba ${escaparHtml(item.sheetName || 'principal')}</div>
         </div>
         <span class="status-tag">Pronta</span>
       </div>
+      <div class="import-result-summary">
+        <span><strong>${resumoItem.previstas}</strong> previstas</span>
+        <span><strong>${resumoItem.realizadas}</strong> realizadas</span>
+        <span><strong>${resumoItem.atrasadas}</strong> em atraso</span>
+        <span><strong>${resumoItem.pendentes}</strong> pendentes</span>
+      </div>
+      ${avisos.length ? `<div class="admin-feedback">${escaparHtml(avisos.join(' • '))}</div>` : ''}
       <div class="table-shell preview-table-shell">
-        <table>${head}${body}</table>
+        <table>
+          <thead><tr><th>Data</th><th>Checklist</th><th>Loja</th><th>Hora</th><th>Resultado</th></tr></thead>
+          ${body}
+        </table>
       </div>
     </div>`;
   }).join('');
@@ -1566,7 +2235,7 @@ async function montarPreviewArquivos() {
   renderizarPreviewImportacao();
 
   if (!arquivos.length) {
-    setImportStatus('Selecione uma ou mais planilhas para visualizar a prévia e depois importar.', 'Sem arquivo');
+    setImportStatus('Selecione uma ou mais planilhas do relatório “Checklists Respondidos” do Moki.', 'Sem arquivo');
     return;
   }
 
@@ -1578,17 +2247,18 @@ async function montarPreviewArquivos() {
   for (const arquivo of arquivos) {
     try {
       const sheets = /\.csv$/i.test(arquivo.name) ? parseCsv(await arquivo.text()) : await parseXlsx(arquivo);
-      const baseImportada = normalizarRegistrosImportados(sheets);
-      const sheetName = obterNomeAbaRotinas(sheets);
-      const preview = gerarLinhasPreview(sheets[sheetName] || Object.values(sheets)[0] || []);
+      const processamento = processarPlanilhaMoki(sheets);
+      const sheetName = processamento.nomeAba || obterNomeAbaRotinas(sheets);
       previewsImportacao.push({
         fileName: arquivo.name,
         sheets,
-        baseImportada,
-        total: baseImportada.length,
-        latestDate: obterUltimaData(baseImportada),
-        sheetName,
-        preview
+        processamento,
+        respostas: processamento.respostas,
+        resultados: processamento.resultados,
+        rawData: processamento.rawData,
+        total: processamento.resultados.length,
+        latestDate: processamento.datas.at(-1) || '',
+        sheetName
       });
     } catch (error) {
       previewsImportacao.push({
@@ -1604,20 +2274,36 @@ async function montarPreviewArquivos() {
   if (validos) {
     setImportStatus(
       validos === 1
-        ? 'Pré-visualização pronta. Revise os dados e clique em “Importar agora”.'
-        : `Pré-visualização pronta para ${validos} planilha(s). Revise os dados e clique em “Importar agora”.`,
+        ? 'Pré-visualização pronta. Revise os resultados e clique em “Importar agora”.'
+        : `Pré-visualização pronta para ${validos} planilha(s). Revise os resultados e clique em “Importar agora”.`,
       'Prévia pronta'
     );
   } else {
-    setImportStatus('Nenhuma das planilhas selecionadas pôde ser lida. Revise o arquivo e tente novamente.', 'Falha na prévia');
+    setImportStatus('Nenhuma das planilhas selecionadas pôde ser lida como relatório do Moki.', 'Falha na prévia');
   }
 }
 
 
+function dataExpiracaoDadosBrutos(importedAt = new Date()) {
+  const data = importedAt instanceof Date ? new Date(importedAt) : new Date(importedAt);
+  data.setDate(data.getDate() + PRAZO_DADOS_BRUTOS_DIAS);
+  return data.toISOString();
+}
+
+function substituirSnapshotLocal(snapshot) {
+  const indice = snapshotsImportados.findIndex((item) => item.id === snapshot.id);
+  if (indice >= 0) {
+    snapshotsImportados.splice(indice, 1, snapshot);
+  } else {
+    snapshotsImportados.push(snapshot);
+  }
+  snapshotsImportados.sort((a, b) => new Date(b.importedAt) - new Date(a.importedAt));
+}
+
 async function importarArquivo() {
   const arquivos = Array.from(fileInput?.files || []);
   if (!arquivos.length) {
-    setImportStatus('Selecione pelo menos um arquivo .xlsx, .xlsm ou .csv para importar.');
+    setImportStatus('Selecione pelo menos um arquivo .xlsx, .xlsm ou .csv do Moki.');
     return;
   }
 
@@ -1625,86 +2311,110 @@ async function importarArquivo() {
     await montarPreviewArquivos();
   }
 
-  const previewsValidas = previewsImportacao.filter((item) => !item.error && Array.isArray(item.baseImportada));
+  const previewsValidas = previewsImportacao.filter((item) => !item.error && Array.isArray(item.respostas));
   if (!previewsValidas.length) {
-    setImportStatus('Nenhuma planilha válida ficou pronta para importação. Corrija os arquivos e tente novamente.', 'Falha na importação');
+    setImportStatus('Nenhuma planilha Moki válida ficou pronta para importação.', 'Falha na importação');
     return;
   }
 
-  let totalRegistros = 0;
-  let arquivosImportados = 0;
-  let sincronizados = 0;
-  const erros = previewsImportacao.filter((item) => item.error).map((item) => `${item.fileName}: ${item.error}`);
+  const respostasNovas = mesclarRespostas(previewsValidas.flatMap((item) => item.respostas || []));
+  const rawData = previewsValidas.flatMap((item) => item.rawData || []);
+  const datas = [...new Set(respostasNovas.map((item) => item.data).filter(Boolean))].sort();
+  const lojasImportadas = respostasNovas.map((item) => item.loja);
+  const nomesArquivos = [...new Set(previewsValidas.map((item) => item.fileName))];
+
+  if (!datas.length) {
+    setImportStatus('Nenhuma data válida foi identificada nas respostas do Moki.', 'Falha na importação');
+    return;
+  }
+
+  registrarLojasConhecidas(lojasImportadas, false);
+  salvarStore(STORAGE_KEYS.knownStores, [...lojasConhecidas].sort((a, b) => a.localeCompare(b, 'pt-BR')));
+  salvarConfigNoFirebase();
 
   setImportStatus(
-    previewsValidas.length === 1
-      ? `Importando ${previewsValidas[0].fileName}...`
-      : `Importando ${previewsValidas.length} planilha(s)...`,
+    datas.length === 1
+      ? `Processando as rotinas de ${datas[0].split('-').reverse().join('/')}...`
+      : `Processando rotinas de ${datas.length} datas...`,
     'Importando...'
   );
 
-  for (let index = 0; index < previewsValidas.length; index += 1) {
-    const item = previewsValidas[index];
+  let datasImportadas = 0;
+  let sincronizadas = 0;
+  let totalPrevistas = 0;
+  let totalRealizadas = 0;
+  let totalAtrasadas = 0;
+  let totalPendentes = 0;
+  const erros = [];
+
+  for (const data of datas) {
+    const respostasData = respostasNovas.filter((item) => item.data === data);
+    const gerado = gerarResultadosParaData(data, respostasData, lojasImportadas);
+    const resultados = normalizarBaseCompleta(gerado.resultados, 'importada');
+    const summary = resumirResultadosImportacao(resultados);
+    const agora = new Date();
+    const snapshotId = `rotinas-${data}`;
     const snapshot = {
-      id: `snap-${Date.now()}-${index}-${item.fileName.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
-      fileName: item.fileName,
-      importedAt: new Date().toISOString(),
-      total: item.baseImportada.length,
-      latestDate: obterUltimaData(item.baseImportada),
-      data: item.baseImportada,
+      id: snapshotId,
+      fileName: nomesArquivos.join(' + '),
+      importedAt: agora.toISOString(),
+      total: resultados.length,
+      responsesCount: respostasData.length,
+      latestDate: data,
+      data: resultados,
+      rawData: rawData.filter((item) => item.data === data),
+      rawRowsCount: rawData.filter((item) => item.data === data).length,
+      rawExpiresAt: dataExpiracaoDadosBrutos(agora),
+      rawAvailable: true,
+      rawDeletedAt: '',
+      summary,
       chunksCount: 0,
-      schemaVersion: firebaseDisponivel ? 2 : 1
+      rawChunksCount: 0,
+      schemaVersion: 3
     };
 
-    const synced = firebaseDisponivel ? await salvarSnapshotNoFirebase(snapshot) : true;
-    if (synced) {
-      snapshotsImportados.push(snapshot);
-      totalRegistros += item.baseImportada.length;
-      arquivosImportados += 1;
-      if (firebaseDisponivel) sincronizados += 1;
-    } else {
-      erros.push(`${item.fileName}: falha ao sincronizar no Firebase`);
+    const sincronizado = firebaseDisponivel ? await salvarSnapshotNoFirebase(snapshot) : true;
+    if (!sincronizado && firebaseDisponivel) {
+      erros.push(`${data.split('-').reverse().join('/')}: falha ao sincronizar no Firebase`);
     }
+
+    const snapshotMemoria = firebaseDisponivel ? { ...snapshot, rawData: undefined } : snapshot;
+    substituirSnapshotLocal(snapshotMemoria);
+    datasImportadas += 1;
+    if (sincronizado && firebaseDisponivel) sincronizadas += 1;
+    totalPrevistas += summary.previstas;
+    totalRealizadas += summary.realizadas;
+    totalAtrasadas += summary.atrasadas;
+    totalPendentes += summary.pendentes;
   }
 
   persistirSnapshotsLocais();
   atualizarBasePorSnapshots(
-    arquivosImportados === 1
-      ? `${totalRegistros} registros importados com sucesso. A planilha já está alimentando o painel.`
-      : `${totalRegistros} registros importados com sucesso em ${arquivosImportados} planilha(s). Todas já estão alimentando o painel.`
+    `${totalPrevistas} rotinas previstas • ${totalRealizadas} realizadas • ${totalAtrasadas} em atraso • ${totalPendentes} pendentes.`
   );
 
   if (fileInput) fileInput.value = '';
   previewsImportacao = [];
   renderizarPreviewImportacao();
+  limparDadosBrutosExpirados();
 
-  if (sincronizados === arquivosImportados && !erros.length) {
+  const prazoTexto = `Os dados brutos serão excluídos automaticamente após ${PRAZO_DADOS_BRUTOS_DIAS} dias; os resultados permanecerão no painel.`;
+  if (!erros.length) {
     setImportStatus(
-      arquivosImportados === 1
-        ? `${totalRegistros} registros importados com sucesso. A planilha foi anexada e sincronizada.`
-        : `${totalRegistros} registros importados com sucesso em ${arquivosImportados} planilha(s). Todas foram anexadas e sincronizadas.`,
-      'Importado'
+      `${datasImportadas} dia(s) processado(s): ${totalRealizadas} realizadas, ${totalAtrasadas} em atraso e ${totalPendentes} pendentes. ${prazoTexto}`,
+      firebaseDisponivel ? 'Importado e sincronizado' : 'Importado localmente'
     );
     return;
   }
 
-  if (sincronizados < arquivosImportados) {
-    setImportStatus(
-      `${totalRegistros} registros importados com sucesso no painel. ${sincronizados} de ${arquivosImportados} planilha(s) sincronizadas online.${erros.length ? ` Falhas de leitura: ${erros.join(' | ')}` : ''}`,
-      sincronizados ? 'Importado parcialmente' : 'Importado localmente'
-    );
-    return;
-  }
-
-  if (erros.length) {
-    setImportStatus(
-      `${arquivosImportados} planilha(s) importada(s) com sucesso e ${erros.length} com falha. ${erros.join(' | ')}`,
-      'Importação parcial'
-    );
-  }
+  setImportStatus(
+    `${datasImportadas} dia(s) processado(s) no painel. ${sincronizadas} sincronizado(s) online. ${erros.join(' | ')} ${prazoTexto}`,
+    sincronizadas ? 'Importação parcial' : 'Importado localmente'
+  );
 }
 
 async function resetarParaSimulada() {
+  const idsAnteriores = snapshotsImportados.map((snapshot) => snapshot.id).filter(Boolean);
   const totalAnterior = snapshotsImportados.length;
   snapshotsImportados = [];
   persistirSnapshotsLocais();
@@ -1713,7 +2423,7 @@ async function resetarParaSimulada() {
   renderizarPreviewImportacao();
   atualizarBasePorSnapshots('Painel limpo com sucesso.');
 
-  const remotoLimpo = await limparSnapshotsNoFirebase();
+  const remotoLimpo = await limparSnapshotsNoFirebase(idsAnteriores);
   setImportStatus(
     remotoLimpo
       ? 'Painel limpo com sucesso. A atualização foi enviada para todos os usuários.'
@@ -1742,12 +2452,88 @@ function atualizarResumoAdmin() {
   if (adminSummary) adminSummary.textContent = `${formatarNumero.format(registros.length)} registros ativos • ${lojas} lojas • ${formadores} formadores • origem: ${origem}.`;
 }
 
+function popularRotinasConfigAdmin() {
+  const select = document.getElementById('routineConfigSelect');
+  if (!select) return;
+  const atual = select.value || configRotinas[0]?.id || '';
+  select.innerHTML = configRotinas.map((rotina) => `<option value="${escaparHtml(rotina.id)}">${escaparHtml(rotina.nome)}</option>`).join('');
+  select.value = configRotinas.some((item) => item.id === atual) ? atual : (configRotinas[0]?.id || '');
+  preencherRegraRotinaSelecionada();
+}
+
+function preencherRegraRotinaSelecionada() {
+  const select = document.getElementById('routineConfigSelect');
+  if (!select) return;
+  const rotina = obterConfigRotinaPorId(select.value) || configRotinas[0];
+  if (!rotina) return;
+
+  const start = document.getElementById('routineStartTime');
+  const end = document.getElementById('routineEndTime');
+  const startTol = document.getElementById('routineStartTolerance');
+  const endTol = document.getElementById('routineEndTolerance');
+  const meta = document.getElementById('routineConfigMeta');
+
+  if (start) start.value = rotina.horarioInicio || '';
+  if (end) end.value = rotina.horarioFim || '';
+  if (startTol) startTol.value = rotina.toleranciaInicioMin ?? 0;
+  if (endTol) endTol.value = rotina.toleranciaFimMin ?? 0;
+  if (meta) {
+    meta.textContent = `${formatarDiasRotina(rotina.dias)} • ${formatarEscopoRotina(rotina.escopo)} • Checklist Moki: ${rotina.nomeMoki}`;
+  }
+}
+
+async function salvarRegraRotina() {
+  const select = document.getElementById('routineConfigSelect');
+  const feedback = document.getElementById('routineConfigFeedback');
+  const rotina = obterConfigRotinaPorId(select?.value);
+  if (!rotina) {
+    if (feedback) feedback.textContent = 'Selecione uma rotina válida.';
+    return;
+  }
+
+  const horarioInicio = validarHorario(document.getElementById('routineStartTime')?.value);
+  const horarioFim = validarHorario(document.getElementById('routineEndTime')?.value);
+  const toleranciaInicioMin = limitarInteiro(document.getElementById('routineStartTolerance')?.value, 0, 1440);
+  const toleranciaFimMin = limitarInteiro(document.getElementById('routineEndTolerance')?.value, 0, 1440);
+
+  if (horarioInicio && horarioFim && horarioParaMinutos(horarioInicio) > horarioParaMinutos(horarioFim)) {
+    if (feedback) feedback.textContent = 'O horário de início não pode ser depois do horário de fim.';
+    return;
+  }
+
+  configRotinas = configRotinas.map((item) => item.id === rotina.id ? {
+    ...item,
+    horarioInicio,
+    horarioFim,
+    toleranciaInicioMin,
+    toleranciaFimMin
+  } : item);
+
+  salvarStore(STORAGE_KEYS.routineConfig, configRotinas);
+  const sincronizado = await salvarConfigNoFirebase();
+  registrosBase = consolidarSnapshotsImportados();
+  aplicarBase(
+    registrosBase,
+    snapshotsImportados.length ? 'importada' : 'simulada',
+    importSummary?.textContent || 'Regras atualizadas.'
+  );
+  preencherRegraRotinaSelecionada();
+  renderHistoricoPlanilhas();
+
+  if (feedback) {
+    feedback.textContent = sincronizado || !firebaseDisponivel
+      ? `Regra salva para “${rotina.nome}”.`
+      : `Regra salva neste dispositivo, mas a sincronização online não foi concluída.`;
+  }
+}
+
 function popularControlesAdmin() {
   const lojas = obterLojasConhecidas();
   const formadores = [...new Set([...Object.values(lojaFormadorMap), ...registrosBase.map((item) => item.formador)].filter(ehFormadorAtivo))].sort();
   preencherSelect(document.getElementById('adminLojaSelect'), lojas, 'Selecione a loja');
   preencherSelect(document.getElementById('renameLojaSelect'), lojas, 'Selecione a loja');
   preencherSelect(document.getElementById('adminFormadorSelect'), formadores, 'Selecione o formador');
+  popularRotinasConfigAdmin();
   renderVinculosLista();
   renderRenamesLista();
 }
@@ -1779,20 +2565,31 @@ function renderRenamesLista() {
 function renderHistoricoPlanilhas() {
   const container = document.getElementById('historicoPlanilhas');
   if (!container) return;
-    if (!snapshotsImportados.length) {
-    container.innerHTML = '<div class="empty-state">Nenhuma planilha importada foi salva ainda.</div>';
+  if (!snapshotsImportados.length) {
+    container.innerHTML = '<div class="empty-state">Nenhuma importação foi processada ainda.</div>';
     return;
   }
 
   container.innerHTML = snapshotsImportados.map((snapshot) => {
     const dataImportacao = new Date(snapshot.importedAt).toLocaleString('pt-BR');
+    const dataReferencia = snapshot.latestDate ? snapshot.latestDate.split('-').reverse().join('/') : 'não identificada';
+    const dadosSnapshot = normalizarBaseCompleta(snapshot.data || [], 'importada');
+    const resumo = dadosSnapshot.length ? resumirResultadosImportacao(dadosSnapshot) : (snapshot.summary || {});
+    const rawDisponivel = snapshot.rawAvailable !== false && snapshot.rawExpiresAt && !dadosBrutosExpirados(snapshot);
+    const expiraTexto = snapshot.rawExpiresAt ? new Date(snapshot.rawExpiresAt).toLocaleString('pt-BR') : '';
+    const statusRaw = rawDisponivel
+      ? `Dados brutos disponíveis até ${expiraTexto}`
+      : 'Dados brutos excluídos • resultados preservados';
+
     return `
       <div class="history-card">
         <div>
-          <div class="history-title">${escaparHtml(snapshot.fileName)}</div>
-          <div class="history-meta">Importada em ${dataImportacao} • ${snapshot.total} registros • última data ${escaparHtml(snapshot.latestDate || 'não identificada')}</div>
+          <div class="history-title">${escaparHtml(snapshot.fileName || `Rotinas ${dataReferencia}`)}</div>
+          <div class="history-meta">Data de referência ${escaparHtml(dataReferencia)} • processada em ${escaparHtml(dataImportacao)}</div>
+          <div class="history-meta">${resumo.previstas || snapshot.total || 0} previstas • ${resumo.realizadas || 0} realizadas • ${resumo.atrasadas || 0} em atraso • ${resumo.pendentes || 0} pendentes</div>
+          <div class="history-meta">${escaparHtml(statusRaw)}</div>
         </div>
-        <div class="status-tag">Incluída no painel</div>
+        <div class="status-tag">${rawDisponivel ? 'Dados temporários' : 'Resultado permanente'}</div>
         <div class="history-actions">
           <button class="btn btn-secondary" type="button" data-action="apply-snapshot" data-id="${snapshot.id}">Reprocessar</button>
           <button class="btn btn-danger" type="button" data-action="delete-snapshot" data-id="${snapshot.id}">Excluir</button>
@@ -1848,7 +2645,8 @@ function salvarNovoNomeLoja() {
 async function usarSnapshot(snapshotId) {
   const snapshot = snapshotsImportados.find((item) => item.id === snapshotId);
   if (!snapshot) return;
-  const atualizado = { ...snapshot, data: normalizarBaseCompleta(snapshot.data, 'importada') };
+  const dadosAtualizados = normalizarBaseCompleta(snapshot.data, 'importada');
+  const atualizado = { ...snapshot, data: dadosAtualizados, summary: resumirResultadosImportacao(dadosAtualizados) };
   snapshotsImportados = snapshotsImportados.map((item) => item.id === snapshotId ? atualizado : item);
   persistirSnapshotsLocais();
   atualizarBasePorSnapshots(`Planilha ${snapshot.fileName} reprocessada e aplicada no painel.`);
@@ -1938,6 +2736,10 @@ function configurarAdmin() {
 
   document.getElementById('saveLojaVinculo').addEventListener('click', salvarVinculoLoja);
   document.getElementById('saveLojaRename').addEventListener('click', salvarNovoNomeLoja);
+  const routineConfigSelect = document.getElementById('routineConfigSelect');
+  const saveRoutineConfig = document.getElementById('saveRoutineConfig');
+  if (routineConfigSelect) routineConfigSelect.addEventListener('change', preencherRegraRotinaSelecionada);
+  if (saveRoutineConfig) saveRoutineConfig.addEventListener('click', salvarRegraRotina);
   const historicoPlanilhas = document.getElementById('historicoPlanilhas');
   if (historicoPlanilhas) {
     historicoPlanilhas.addEventListener('click', (event) => {
@@ -2197,32 +2999,29 @@ function obterRankingFormadoresApresentacao(dados, limite = 3) {
 
 function aplicarAjusteFitApresentacao() {
   if (!apresentacaoState.aberta) return;
-  const modal = document.getElementById('presentationModal');
   const content = document.getElementById('presentationContent');
   const frame = content?.querySelector('.presentation-frame');
   const scaleBox = content?.querySelector('.presentation-scale-box');
-  const visualSlide = content?.querySelector('.presentation-slide-visual, .presentation-slide');
-  if (!modal || !content || !frame || !scaleBox || !visualSlide) return;
+  if (!content || !frame || !scaleBox) return;
 
-  frame.classList.remove('is-compact', 'is-ultra-compact');
+  frame.classList.remove('is-conecta-compact', 'is-conecta-tight');
 
-  const baseWidth = Number(frame.dataset.baseWidth || 1600);
-  const baseHeight = Number(frame.dataset.baseHeight || 900);
-  const viewportWidth = Math.max(content.clientWidth - 8, 320);
-  const viewportHeight = Math.max(content.clientHeight - 8, 240);
-  const scale = Math.min(viewportWidth / baseWidth, viewportHeight / baseHeight, 1);
+  const baseWidth = Number(frame.dataset.baseWidth || 1920);
+  const baseHeight = Number(frame.dataset.baseHeight || 1080);
+  const viewportWidth = Math.max(content.clientWidth - 20, 320);
+  const viewportHeight = Math.max(content.clientHeight - 20, 240);
+  const scale = Math.min(viewportWidth / baseWidth, viewportHeight / baseHeight) * 0.985;
 
   scaleBox.style.width = `${baseWidth}px`;
   scaleBox.style.height = `${baseHeight}px`;
   scaleBox.style.transform = `scale(${scale})`;
 
-  const needsCompact = visualSlide.scrollHeight > visualSlide.clientHeight || window.innerHeight < 900 || window.innerWidth < 1500;
-  if (needsCompact) frame.classList.add('is-compact');
+  const relacao = viewportWidth / Math.max(viewportHeight, 1);
+  const compact = viewportHeight < 1020 || viewportWidth < 1760 || relacao < 1.72;
+  const tight = viewportHeight < 930 || viewportWidth < 1600 || relacao < 1.62;
 
-  requestAnimationFrame(() => {
-    const overflowPersistente = visualSlide.scrollHeight > visualSlide.clientHeight + 4 || window.innerHeight < 820 || window.innerWidth < 1380;
-    frame.classList.toggle('is-ultra-compact', overflowPersistente);
-  });
+  if (compact) frame.classList.add('is-conecta-compact');
+  if (tight) frame.classList.add('is-conecta-tight');
 }
 
 function montarFiltrosApresentacao() {
@@ -2305,19 +3104,15 @@ function gerarSlidesApresentacao() {
   const dados = [...dadosFiltrados];
   const kpis = resumirKPIs(dados);
   const formadores = obterRankingFormadoresApresentacao(dados, 3);
-  const topLojas = obterTopLojas(dados, 7);
-  const rotinasCriticas = obterRotinasCriticas(dados, 6);
   const destaques = obterMelhoresLojasPorFormador(dados).slice(0, 3);
-  const calendarioHtml = document.getElementById('calendarioExecucao')?.innerHTML || '';
   const periodo = obterPeriodoResumoLabel();
   const filtrosHtml = montarFiltrosApresentacao();
   const meta = obterMetaApresentacao();
   const diferencaMeta = kpis.execucao - meta;
   const statusMeta = mensagemMetaApresentacao(kpis.execucao, meta);
   const progressoExecucao = Math.max(0, Math.min(kpis.execucao, 100));
-  const progressoMeta = Math.max(0, Math.min((kpis.execucao / Math.max(meta, 1)) * 100, 100));
   const top3Formadores = formadores.slice(0, 3);
-  const totalSlidesApresentacao = 6;
+  const totalSlidesApresentacao = 4;
 
   if (!dados.length) {
     return [{
@@ -2325,7 +3120,7 @@ function gerarSlidesApresentacao() {
       subtitulo: 'O painel está sem dados no momento.',
       periodo,
       filtrosHtml,
-      html: '<div class="presentation-empty"><div><h3>Nenhuma planilha ativa</h3><p>Entre na área ADM, importe a base e volte para este modo para exibir a TV automaticamente.</p></div></div>'
+      html: '<div class="presentation-empty"><div><h3>Nenhuma planilha ativa</h3><p>Entre na área ADM, importe a base e volte para este modo para exibir a apresentação automaticamente.</p></div></div>'
     }];
   }
 
@@ -2335,7 +3130,7 @@ function gerarSlidesApresentacao() {
     periodo,
     filtrosHtml,
     html: `
-      <div class="presentation-slide presentation-slide-visual presentation-slide-intro">
+      <div class="presentation-slide presentation-slide-visual presentation-slide-intro presentation-conecta-slide">
         ${montarHeroSlideApresentacao('PAINEL DE ROTINAS OPERACIONAIS', periodo)}
         <div class="presentation-summary-grid">
           <article class="presentation-summary-card">
@@ -2371,13 +3166,13 @@ function gerarSlidesApresentacao() {
       </div>`
   };
 
-  const slideFormadores = {
+  const slideMeta = {
     titulo: 'Slide 2',
     subtitulo: 'Execução geral versus meta.',
     periodo,
     filtrosHtml,
     html: `
-      <div class="presentation-slide presentation-slide-visual presentation-slide-target">
+      <div class="presentation-slide presentation-slide-visual presentation-slide-target presentation-conecta-slide">
         ${montarHeroSlideApresentacao('EXECUÇÃO GERAL VS META', periodo)}
         <div class="presentation-vs-grid">
           <div class="presentation-vs-ring-shell">
@@ -2404,8 +3199,8 @@ function gerarSlidesApresentacao() {
               <div class="presentation-vs-bar-marker" style="left:${meta}%"></div>
             </div>
             <div class="presentation-vs-bottom-row">
-              <span>${meta}%</span>
-              <strong>${diferencaMeta >= 0 ? '+' : ''}${diferencaMeta}%</strong>
+              <span>Diferença para a meta</span>
+              <strong>${diferencaMeta > 0 ? '+' : ''}${diferencaMeta.toFixed(1).replace('.', ',')}%</strong>
             </div>
           </div>
         </div>
@@ -2414,13 +3209,13 @@ function gerarSlidesApresentacao() {
       </div>`
   };
 
-  const slideDestaques = {
+  const slideFormadores = {
     titulo: 'Slide 3',
     subtitulo: 'Ranking visual dos formadores.',
     periodo,
     filtrosHtml,
     html: `
-      <div class="presentation-slide presentation-slide-visual presentation-slide-podium">
+      <div class="presentation-slide presentation-slide-visual presentation-slide-podium presentation-conecta-slide">
         ${montarHeroSlideApresentacao('RANKING DE FORMADORES', periodo)}
         <div class="presentation-podium-grid ${top3Formadores.length < 3 ? 'is-compact' : ''}">
           ${top3Formadores.map((item, index) => {
@@ -2455,7 +3250,7 @@ function gerarSlidesApresentacao() {
     periodo,
     filtrosHtml,
     html: `
-      <div class="presentation-slide presentation-slide-visual presentation-slide-showcase">
+      <div class="presentation-slide presentation-slide-visual presentation-slide-showcase presentation-conecta-slide">
         ${montarHeroSlideApresentacao('MELHOR LOJA POR FORMADOR', periodo)}
         <div class="presentation-showcase-grid">
           ${destaques.map((item) => `
@@ -2472,77 +3267,7 @@ function gerarSlidesApresentacao() {
       </div>`
   };
 
-  const slideCriticos = {
-    titulo: 'Rotinas críticas e atenção',
-    subtitulo: 'Pontos que merecem acompanhamento no período.',
-    periodo,
-    filtrosHtml,
-    html: `
-      <div class="presentation-slide presentation-dual-panels">
-        <div class="presentation-panel">
-          <h3 class="presentation-panel-title">Rotinas menos realizadas</h3>
-          ${criarListaApresentacao(rotinasCriticas, (item, index) => {
-            const execucao = percentual(item.realizadas, item.total);
-            return `
-              <div class="presentation-list-item">
-                <div class="presentation-list-rank">${index + 1}</div>
-                <div class="presentation-list-main">
-                  <div class="presentation-list-title">${escaparHtml(item.rotina)}</div>
-                  <div class="presentation-list-meta">${item.realizadas} realizadas de ${item.total} previstas</div>
-                  <div class="presentation-progress"><div class="presentation-progress-fill" style="width:${execucao}%"></div></div>
-                </div>
-                <div class="presentation-list-value">${execucao}%</div>
-              </div>`;
-          })}
-        </div>
-        <div class="presentation-panel">
-          <h3 class="presentation-panel-title">Leitura rápida</h3>
-          <div class="presentation-list">
-            <div class="presentation-list-item">
-              <div class="presentation-list-rank">⚠️</div>
-              <div class="presentation-list-main">
-                <div class="presentation-list-title">Pendências no período</div>
-                <div class="presentation-list-meta">Rotinas não concluídas no recorte atual</div>
-              </div>
-              <div class="presentation-list-value">${kpis.pendentes}</div>
-            </div>
-            <div class="presentation-list-item">
-              <div class="presentation-list-rank">🏬</div>
-              <div class="presentation-list-main">
-                <div class="presentation-list-title">Lojas acompanhadas</div>
-                <div class="presentation-list-meta">Quantidade de lojas com registros no período</div>
-              </div>
-              <div class="presentation-list-value">${new Set(dados.map((item) => item.loja)).size}</div>
-            </div>
-            <div class="presentation-list-item">
-              <div class="presentation-list-rank">🧾</div>
-              <div class="presentation-list-main">
-                <div class="presentation-list-title">Rotinas cadastradas</div>
-                <div class="presentation-list-meta">Quantidade de rotinas presentes no recorte atual</div>
-              </div>
-              <div class="presentation-list-value">${new Set(dados.map((item) => item.rotina)).size}</div>
-            </div>
-          </div>
-        </div>
-        ${montarRodapeSlideApresentacao(4, totalSlidesApresentacao)}
-      </div>`
-  };
-
-  const slideCalendario = {
-    titulo: 'Calendário mensal',
-    subtitulo: 'Visão diária da execução para acompanhamento em tela grande.',
-    periodo,
-    filtrosHtml,
-    html: `
-      <div class="presentation-slide">
-        <div class="presentation-panel presentation-calendar-shell">
-          ${calendarioHtml || '<div class="presentation-empty">Sem calendário disponível para o período atual.</div>'}
-        </div>
-        ${montarRodapeSlideApresentacao(5, totalSlidesApresentacao)}
-      </div>`
-  };
-
-  return [slideExecutivo, slideFormadores, slideDestaques, slideLojas, slideCriticos, slideCalendario];
+  return [slideExecutivo, slideMeta, slideFormadores, slideLojas];
 }
 
 function limparTimerApresentacao() {
@@ -2598,7 +3323,7 @@ function renderizarApresentacaoSeAberta() {
     content.innerHTML = `
       <div class="presentation-viewport">
         <div class="presentation-scale-box">
-          <div class="presentation-frame" data-base-width="1600" data-base-height="900">${slide.html}</div>
+          <div class="presentation-frame" data-base-width="1920" data-base-height="1080">${slide.html}</div>
         </div>
       </div>`;
   }
@@ -2688,7 +3413,7 @@ function configurarApresentacao() {
 
 function autoAbrirApresentacaoSeSolicitado() {
   const params = new URLSearchParams(window.location.search);
-  if (params.get('apresentacao') === '1' || params.get('tv') === '1') {
+  if (params.get('apresentacao') === '1' || params.get('tv') === '1' || params.get('conecta') === '1') {
     abrirApresentacao({ auto: true });
   }
 }
@@ -2701,7 +3426,10 @@ function inicializarAplicacao() {
   configurarAdmin();
   configurarAbasResumo();
   configurarApresentacao();
+  salvarStore(STORAGE_KEYS.routineConfig, configRotinas);
+  salvarStore(STORAGE_KEYS.knownStores, [...lojasConhecidas].sort((a, b) => a.localeCompare(b, 'pt-BR')));
   inicializarBaseAtiva();
+  agendarLimpezaDadosBrutos();
   autoAbrirApresentacaoSeSolicitado();
   inicializarFirebaseOpcional();
 }
