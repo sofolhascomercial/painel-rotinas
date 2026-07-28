@@ -23,6 +23,7 @@ let firebaseListenersIniciados = false;
 let firebaseInicializado = false;
 let firebaseConfigRecebida = false;
 let firebaseSnapshotsRecebidos = false;
+let aplicarEstadoRemotoTimer = null;
 let resumoPeriodoAtual = 'diario';
 
 const APRESENTACAO_CONFIG = {
@@ -55,7 +56,8 @@ const ADMIN_CREDENTIALS = {
 
 const FORMADORES_ATIVOS = ['Luciano', 'Karina', 'Luana'];
 const FORMADORES_ATIVOS_SLUG = new Set(FORMADORES_ATIVOS.map((item) => slug(item)));
-const APP_STORAGE_VERSION = '2026-03-23-zero-base-v3';
+const APP_STORAGE_VERSION = '2026-07-27-lojas-ativas-v5';
+const RESULT_SCHEMA_VERSION = 4;
 
 const PRAZO_DADOS_BRUTOS_DIAS = 5;
 const INTERVALO_LIMPEZA_DADOS_BRUTOS_MS = 60 * 60 * 1000;
@@ -81,15 +83,75 @@ const ROTINAS_PADRAO = [
   { id: 'rotina-12x36-saida-1745', nome: 'Reabastecimento Saída Até 17:45', nomeMoki: 'Reabastecimento Saída Até 17:45', horarioInicio: '', horarioFim: '17:45', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: '12x36', ativa: true }
 ];
 
-const LOJAS_FIXAS_12X36 = [
-  'DD ÁGUAS CLARAS',
-  'DD JD BOTÂNICO',
-  'DD SIA',
-  'COSTA T-63',
-  'COSTA JARDIM GOIÁS',
-  'COSTA SENADOR CANEDO',
-  'COSTA GOIÂNIA (ANEL VIÁRIO)'
+const LOJAS_ATIVAS = [
+  { codigo: '085', nome: 'ASSAÍ CESAMAR' },
+  { codigo: '086', nome: 'ASSAÍ TEOTÔNIO' },
+  { codigo: '049', nome: 'COMPER ASA SUL' },
+  { codigo: '051', nome: 'COMPER GAMA' },
+  { codigo: '052', nome: 'COMPER SOBRADINHO' },
+  { codigo: '046', nome: 'COMPER ÁGUAS CLARAS' },
+  { codigo: '061', nome: 'COSTA ADE' },
+  { codigo: '080', nome: 'COSTA AVENIDA GOIÁS' },
+  { codigo: '083', nome: 'COSTA GO-070' },
+  { codigo: '059', nome: 'COSTA GOIÂNIA' },
+  { codigo: '081', nome: 'COSTA JARDIM GOIÁS' },
+  { codigo: '058', nome: 'COSTA LARANJEIRAS' },
+  { codigo: '056', nome: 'COSTA LUZIÂNIA' },
+  { codigo: '084', nome: 'COSTA RIO VERDE' },
+  { codigo: '060', nome: 'COSTA SANTA MARIA' },
+  { codigo: '082', nome: 'COSTA SENADOR CANEDO' },
+  { codigo: '079', nome: 'COSTA T-63' },
+  { codigo: '057', nome: 'COSTA TAGUATINGA' },
+  { codigo: '055', nome: 'COSTA TAQUARI' },
+  { codigo: '062', nome: 'COSTA UNIEURO' },
+  { codigo: '063', nome: 'COSTA VALPARAISO' },
+  { codigo: '019', nome: 'DD APARECIDA GOIÂNIA' },
+  { codigo: '011', nome: 'DD BR 070' },
+  { codigo: '004', nome: 'DD CEILANDIA CENTRO' },
+  { codigo: '008', nome: 'DD CEILANDIA SUL' },
+  { codigo: '078', nome: 'DD CEILÂNDIA NORTE' },
+  { codigo: '015', nome: 'DD CESAR LATES' },
+  { codigo: '028', nome: 'DD EPTG' },
+  { codigo: '030', nome: 'DD FORMOSA' },
+  { codigo: '032', nome: 'DD FURNAS' },
+  { codigo: '001', nome: 'DD GAMA' },
+  { codigo: '025', nome: 'DD GOIANÉSIA' },
+  { codigo: '006', nome: 'DD GUARÁ' },
+  { codigo: '020', nome: 'DD GURUPI' },
+  { codigo: '014', nome: 'DD HORACIO COSTA' },
+  { codigo: '034', nome: 'DD ITUMBIARA' },
+  { codigo: '022', nome: 'DD JD BOTÂNICO' },
+  { codigo: '021', nome: 'DD LEM' },
+  { codigo: '007', nome: 'DD LUZIÂNIA' },
+  { codigo: '024', nome: 'DD MESTRE DARMAS' },
+  { codigo: '002', nome: 'DD NOVO GAMA' },
+  { codigo: '033', nome: 'DD PARK JK' },
+  { codigo: '018', nome: 'DD PLANALTINA-DF' },
+  { codigo: '010', nome: 'DD PLANALTINA-GO' },
+  { codigo: '029', nome: 'DD RECANTO' },
+  { codigo: '031', nome: 'DD RIACHO' },
+  { codigo: '026', nome: 'DD RIO VERDE' },
+  { codigo: '027', nome: 'DD SAMAMBAIA' },
+  { codigo: '005', nome: 'DD SANTO ÂNTONIO' },
+  { codigo: '013', nome: 'DD SIA' },
+  { codigo: '017', nome: 'DD SOBRADINHO' },
+  { codigo: '016', nome: 'DD TAGUATINGA SUL' },
+  { codigo: '012', nome: 'DD VICENTE PIRES' },
+  { codigo: '023', nome: 'DD VICENTE PIRES 2' },
+  { codigo: '009', nome: 'DD ÁGUAS CLARAS' },
+  { codigo: '003', nome: 'DD ÁGUAS LINDAS' },
+  { codigo: '047', nome: 'FORT CEILÂNDIA' },
+  { codigo: '048', nome: 'FORT PLANALTINA' },
+  { codigo: '054', nome: 'FORT RECANTO DAS EMAS' },
+  { codigo: '053', nome: 'FORT SOL NASCENTE' },
+  { codigo: '050', nome: 'FORT TAGUATINGA' },
+  { codigo: '045', nome: 'FORT VALPARAÍSO' }
 ];
+
+const CODIGOS_LOJAS_12X36 = new Set(['009', '022', '013', '079', '081', '082', '059']);
+const LOJAS_FIXAS_12X36 = LOJAS_ATIVAS.filter((loja) => CODIGOS_LOJAS_12X36.has(loja.codigo)).map((loja) => loja.nome);
+const LOJAS_ATIVAS_POR_CODIGO = new Map(LOJAS_ATIVAS.map((loja) => [loja.codigo, loja]));
+const LOJAS_ATIVAS_POR_SLUG = new Map(LOJAS_ATIVAS.map((loja) => [slug(loja.nome), loja]));
 
 const registrosSimulados = [];
 
@@ -164,6 +226,12 @@ const CADASTRO_LOJAS_FORMADORES = [
 ];
 
 const ALIASES_LOJAS = {
+  'COSTA GOIÂNIA': ['COSTA GOIANIA', 'COSTA GOIÂNIA (ANEL VIÁRIO)', 'COSTA GOIANIA (ANEL VIARIO)', 'COSTA GOIANIA ANEL VIARIO'],
+  'COSTA JARDIM GOIÁS': ['COSTA JARDIM GOIAS'],
+  'COSTA SENADOR CANEDO': ['COSTA SENADOR CANÊDO'],
+  'COSTA AVENIDA GOIÁS': ['COSTA AVENIDA GOIAS'],
+  'ASSAÍ CESAMAR': ['ASSAI CESAMAR'],
+  'ASSAÍ TEOTÔNIO': ['ASSAI TEOTONIO', 'ASSAÍ TEOTONIO'],
   'COMPER ASA SUL': ['G.P - 55 ASA SUL', 'GP 55 ASA SUL', 'G P 55 ASA SUL'],
   'COMPER SOBRADINHO': ['G.P - 30 COMPER SOBRAD', 'GP 30 COMPER SOBRAD', 'COMPER SOBRAD', 'COMPER SOBRADINHO 30'],
   'COMPER ÁGUAS CLARAS': ['G.P - 58 AGUAS CLARAS', 'GP 58 AGUAS CLARAS', 'COMPER AGUAS CLARAS'],
@@ -247,6 +315,12 @@ function setImportStatus(summaryText, badgeText = '') {
   if (importBadge) importBadge.textContent = badgeText;
 }
 
+function adminPainelEstaVisivel() {
+  const modal = document.getElementById('adminModal');
+  const painel = document.getElementById('adminPanelView');
+  return Boolean(modal && painel && !modal.classList.contains('hidden') && !painel.classList.contains('hidden'));
+}
+
 const formatarNumero = new Intl.NumberFormat('pt-BR');
 
 function normalizarMapaChaves(mapa = {}) {
@@ -279,12 +353,18 @@ let lojaFormadorMap = sanitizarMapaFormadores({ ...defaultLojaFormadorMap, ...no
 let lojaPromotorMap = normalizarMapaChaves(carregarStore(STORAGE_KEYS.storePromotorMap, {}));
 let lojaRenameMap = normalizarMapaChaves({ ...defaultLojaRenameMap, ...carregarStore(STORAGE_KEYS.storeRenameMap, {}) });
 let configRotinas = normalizarConfiguracoesRotinas(carregarStore(STORAGE_KEYS.routineConfig, ROTINAS_PADRAO));
-let lojasConhecidas = new Set([
-  ...CADASTRO_LOJAS_FORMADORES.map(([loja]) => loja),
-  ...LOJAS_FIXAS_12X36,
-  ...carregarStore(STORAGE_KEYS.knownStores, [])
-].map((loja) => String(loja || '').trim()).filter(Boolean));
+let lojasConhecidas = new Set(LOJAS_ATIVAS.map((loja) => loja.nome));
 let snapshotsImportados = carregarStore(STORAGE_KEYS.importedSnapshots, []);
+let versaoCacheDados = 0;
+let cacheConsolidado = { versao: -1, dados: [] };
+let cacheRespostasPersistidas = { versao: -1, respostas: [] };
+
+function invalidarCacheDados() {
+  versaoCacheDados += 1;
+  cacheConsolidado = { versao: -1, dados: [] };
+  cacheRespostasPersistidas = { versao: -1, respostas: [] };
+}
+
 let registrosBase = normalizarBaseCompleta(registrosSimulados, 'simulada');
 let registros = [...registrosBase];
 let dadosFiltrados = [...registrosBase];
@@ -299,11 +379,12 @@ function migrarArmazenamentoSeNecessario() {
   const versaoAtual = localStorage.getItem(STORAGE_KEYS.appVersion);
   if (versaoAtual === APP_STORAGE_VERSION) return;
 
-  localStorage.removeItem(STORAGE_KEYS.importedSnapshots);
   localStorage.removeItem(STORAGE_KEYS.activeSnapshotId);
   localStorage.removeItem(STORAGE_KEYS.storePromotorMap);
+  localStorage.removeItem(STORAGE_KEYS.knownStores);
   localStorage.setItem(STORAGE_KEYS.storeRenameMap, JSON.stringify(defaultLojaRenameMap));
   localStorage.setItem(STORAGE_KEYS.storeFormadorMap, JSON.stringify(defaultLojaFormadorMap));
+  localStorage.setItem(STORAGE_KEYS.knownStores, JSON.stringify(LOJAS_ATIVAS.map((loja) => loja.nome)));
   localStorage.setItem(STORAGE_KEYS.appVersion, APP_STORAGE_VERSION);
 }
 
@@ -328,26 +409,39 @@ function salvarStore(chave, valor) {
 
 function persistirSnapshotsLocais() {
   if (!firebaseDisponivel) {
-    salvarStore(STORAGE_KEYS.importedSnapshots, snapshotsImportados);
+    salvarStore(STORAGE_KEYS.importedSnapshots, snapshotsImportados.map((item) => ({ ...item, rawData: undefined })));
     return;
   }
 
-  const resumo = snapshotsImportados.map((item) => ({
-    id: item.id,
-    fileName: item.fileName,
-    importedAt: item.importedAt,
-    total: item.total,
-    latestDate: item.latestDate,
-    responsesCount: item.responsesCount || 0,
-    summary: item.summary || {},
-    rawExpiresAt: item.rawExpiresAt || '',
-    rawAvailable: item.rawAvailable !== false,
-    rawRowsCount: item.rawRowsCount || 0,
-    rawDeletedAt: item.rawDeletedAt || '',
-    chunksCount: item.chunksCount || 0,
-    rawChunksCount: item.rawChunksCount || 0,
-    schemaVersion: item.schemaVersion || (Array.isArray(item.data) && item.data.length ? 1 : 2)
-  }));
+  const recentes = new Set(
+    [...snapshotsImportados]
+      .sort((a, b) => new Date(b.importedAt || 0) - new Date(a.importedAt || 0))
+      .slice(0, 7)
+      .map((item) => item.id)
+  );
+
+  const resumo = snapshotsImportados.map((item) => {
+    const manterDadosLocais = recentes.has(item.id) && Array.isArray(item.data);
+    return {
+      id: item.id,
+      fileName: item.fileName,
+      importedAt: item.importedAt,
+      total: item.total,
+      latestDate: item.latestDate,
+      responsesCount: item.responsesCount || 0,
+      summary: item.summary || {},
+      rawExpiresAt: item.rawExpiresAt || '',
+      rawAvailable: item.rawAvailable !== false,
+      rawRowsCount: item.rawRowsCount || 0,
+      rawDeletedAt: item.rawDeletedAt || '',
+      chunksCount: item.chunksCount || 0,
+      rawChunksCount: item.rawChunksCount || 0,
+      dataKind: item.dataKind || (Number(item.schemaVersion || 0) >= RESULT_SCHEMA_VERSION ? 'responses' : 'results'),
+      schemaVersion: item.schemaVersion || (Array.isArray(item.data) && item.data.length ? 1 : 2),
+      dataLoaded: manterDadosLocais,
+      data: manterDadosLocais ? item.data : undefined
+    };
+  });
 
   salvarStore(STORAGE_KEYS.importedSnapshots, resumo);
 }
@@ -367,10 +461,10 @@ function atualizarBasePorSnapshots(detalhe = '') {
     )
   );
 
-  renderHistoricoPlanilhas();
   atualizarResumoAdmin();
-  if (document.getElementById('adminModal') && !document.getElementById('adminPanelView')?.classList.contains('hidden')) {
+  if (adminPainelEstaVisivel()) {
     popularControlesAdmin();
+    renderHistoricoPlanilhas();
   }
 }
 
@@ -405,7 +499,7 @@ async function salvarConfigNoFirebase() {
       storePromotorMap: lojaPromotorMap,
       storeRenameMap: lojaRenameMap,
       routineConfig: configRotinas,
-      knownStores: [...lojasConhecidas].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+      knownStores: LOJAS_ATIVAS.map((loja) => loja.nome),
       updatedAt: new Date().toISOString()
     }, { merge: true });
     return true;
@@ -509,7 +603,7 @@ async function salvarSnapshotNoFirebase(snapshot) {
     const metaFinal = {
       ...meta,
       chunksCount: lotes.length,
-      schemaVersion: 3,
+      schemaVersion: RESULT_SCHEMA_VERSION,
       updatedAt: new Date().toISOString(),
       data: firebaseApi.deleteField()
     };
@@ -636,7 +730,7 @@ async function limparDadosBrutosExpirados() {
   }
 
   persistirSnapshotsLocais();
-  if (removidos) renderHistoricoPlanilhas();
+  if (removidos && adminPainelEstaVisivel()) renderHistoricoPlanilhas();
   return removidos;
 }
 
@@ -650,6 +744,29 @@ function agendarLimpezaDadosBrutos() {
 function aplicarEstadoRemoto() {
   atualizarBasePorSnapshots();
   limparDadosBrutosExpirados();
+}
+
+function agendarAplicacaoEstadoRemoto() {
+  if (!firebaseConfigRecebida || !firebaseSnapshotsRecebidos) return;
+  if (aplicarEstadoRemotoTimer) clearTimeout(aplicarEstadoRemotoTimer);
+  aplicarEstadoRemotoTimer = setTimeout(() => {
+    aplicarEstadoRemotoTimer = null;
+    aplicarEstadoRemoto();
+  }, 80);
+}
+
+async function carregarSnapshotsEmLotes(metas = [], tamanhoLote = 4) {
+  const completos = [];
+  for (let inicio = 0; inicio < metas.length; inicio += tamanhoLote) {
+    const lote = metas.slice(inicio, inicio + tamanhoLote);
+    const carregados = await Promise.all(lote.map(async (item) => ({
+      ...item,
+      data: await carregarDadosSnapshotNoFirebase(item),
+      dataLoaded: true
+    })));
+    completos.push(...carregados);
+  }
+  return completos;
 }
 
 function iniciarFirebaseSync() {
@@ -668,31 +785,30 @@ function iniciarFirebaseSync() {
       ...normalizarMapaChaves(remoto.storeRenameMap || lojaRenameMap)
     });
     configRotinas = normalizarConfiguracoesRotinas(remoto.routineConfig || configRotinas);
-    (Array.isArray(remoto.knownStores) ? remoto.knownStores : []).forEach((loja) => lojasConhecidas.add(String(loja || '').trim()));
+    lojasConhecidas = new Set(LOJAS_ATIVAS.map((loja) => loja.nome));
 
     salvarStore(STORAGE_KEYS.storeFormadorMap, lojaFormadorMap);
     salvarStore(STORAGE_KEYS.storePromotorMap, lojaPromotorMap);
     salvarStore(STORAGE_KEYS.storeRenameMap, lojaRenameMap);
     salvarStore(STORAGE_KEYS.routineConfig, configRotinas);
-    salvarStore(STORAGE_KEYS.knownStores, [...lojasConhecidas].sort((a, b) => a.localeCompare(b, 'pt-BR')));
+    salvarStore(STORAGE_KEYS.knownStores, LOJAS_ATIVAS.map((loja) => loja.nome));
 
     firebaseConfigRecebida = true;
-    if (firebaseInicializado) aplicarEstadoRemoto();
+    invalidarCacheDados();
+    if (firebaseInicializado) agendarAplicacaoEstadoRemoto();
   }, (error) => {
     console.error('Erro ao sincronizar configurações do Firebase:', error);
   });
 
   firebaseApi.onSnapshot(firebaseApi.query(snapshotsCollectionRef, firebaseApi.orderBy('importedAt', 'desc')), async (snapshot) => {
     const metas = snapshot.docs.map((item) => normalizarSnapshotFirebase({ id: item.id, ...item.data() }));
-    const completos = await Promise.all(metas.map(async (item) => ({
-      ...item,
-      data: await carregarDadosSnapshotNoFirebase(item)
-    })));
+    const completos = await carregarSnapshotsEmLotes(metas);
 
     snapshotsImportados = completos;
+    invalidarCacheDados();
     persistirSnapshotsLocais();
     firebaseSnapshotsRecebidos = true;
-    if (firebaseInicializado) aplicarEstadoRemoto();
+    if (firebaseInicializado) agendarAplicacaoEstadoRemoto();
   }, (error) => {
     console.error('Erro ao sincronizar planilhas do Firebase:', error);
   });
@@ -719,6 +835,26 @@ function slug(texto) {
     .replace(/[^a-zA-Z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .toLowerCase();
+}
+
+function normalizarCodigoUnidade(codigo) {
+  const digitos = String(codigo || '').replace(/\D/g, '');
+  return digitos ? digitos.padStart(3, '0') : '';
+}
+
+function resolverLojaAtiva(nomeLoja = '', codigoUnidade = '') {
+  const codigo = normalizarCodigoUnidade(codigoUnidade);
+  if (codigo && LOJAS_ATIVAS_POR_CODIGO.has(codigo)) {
+    return LOJAS_ATIVAS_POR_CODIGO.get(codigo);
+  }
+
+  const nomeRenomeado = renomearLojaSeNecessario(String(nomeLoja || '').trim());
+  const porNome = LOJAS_ATIVAS_POR_SLUG.get(slug(nomeRenomeado)) || LOJAS_ATIVAS_POR_SLUG.get(slug(nomeLoja));
+  return porNome || null;
+}
+
+function lojaEstaAtiva(loja, codigoUnidade = '') {
+  return Boolean(resolverLojaAtiva(loja, codigoUnidade));
 }
 
 function tituloCaso(texto) {
@@ -810,30 +946,26 @@ function rotinaAplicaNaData(rotina, dataIso) {
   return Array.isArray(rotina.dias) && rotina.dias.includes(data.getDay());
 }
 
-function lojaEh12x36(loja) {
-  const normalizada = renomearLojaSeNecessario(loja);
-  const chave = slug(normalizada);
-  return LOJAS_FIXAS_12X36.some((item) => slug(item) === chave);
+function lojaEh12x36(loja, codigoUnidade = '') {
+  const ativa = resolverLojaAtiva(loja, codigoUnidade);
+  return Boolean(ativa && CODIGOS_LOJAS_12X36.has(ativa.codigo));
 }
 
-function rotinaAplicaNaLoja(rotina, loja) {
-  return rotina?.escopo !== '12x36' || lojaEh12x36(loja);
+function rotinaAplicaNaLoja(rotina, loja, dataIso = '', codigoUnidade = '') {
+  const ativa = resolverLojaAtiva(loja, codigoUnidade);
+  if (!ativa) return false;
+
+  const data = dataIsoParaDate(dataIso);
+  const domingo = Boolean(data && data.getDay() === 0);
+  const loja12x36 = CODIGOS_LOJAS_12X36.has(ativa.codigo);
+  if (domingo && !loja12x36) return false;
+
+  return rotina?.escopo !== '12x36' || loja12x36;
 }
 
-function registrarLojasConhecidas(lojas = [], persistir = true) {
-  let alterou = false;
-  (Array.isArray(lojas) ? lojas : []).forEach((loja) => {
-    const normalizada = renomearLojaSeNecessario(String(loja || '').trim());
-    if (normalizada && !lojasConhecidas.has(normalizada)) {
-      lojasConhecidas.add(normalizada);
-      alterou = true;
-    }
-  });
-  if (alterou && persistir) {
-    salvarStore(STORAGE_KEYS.knownStores, [...lojasConhecidas].sort((a, b) => a.localeCompare(b, 'pt-BR')));
-    salvarConfigNoFirebase();
-  }
-  return alterou;
+function registrarLojasConhecidas() {
+  lojasConhecidas = new Set(LOJAS_ATIVAS.map((loja) => loja.nome));
+  return false;
 }
 
 function formatarDiasRotina(dias = []) {
@@ -1097,17 +1229,8 @@ function normalizarBaseCompleta(base, origem = 'simulada', mapaFormadores = new 
     .map((item) => ({ ...item, origem }));
 }
 
-function obterLojasConhecidas(lojasExtras = []) {
-  const lojasRegistros = registrosBase.map((item) => item.loja);
-  const lojasVinculadas = lojaFormadorInicial.map(([loja]) => loja);
-  return [...new Set([
-    ...lojasConhecidas,
-    ...lojasVinculadas,
-    ...LOJAS_FIXAS_12X36,
-    ...lojasRegistros,
-    ...(Array.isArray(lojasExtras) ? lojasExtras : [])
-  ].map((loja) => renomearLojaSeNecessario(loja)).filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+function obterLojasConhecidas() {
+  return LOJAS_ATIVAS.map((loja) => loja.nome);
 }
 
 function preencherSelect(select, valores, placeholder) {
@@ -1661,19 +1784,26 @@ function limparFiltros() {
 }
 
 function consolidarSnapshotsImportados() {
-  if (!snapshotsImportados.length) return [];
-  const ordenados = [...snapshotsImportados].sort((a, b) => new Date(a.importedAt || 0) - new Date(b.importedAt || 0));
-  const mapa = new Map();
+  if (cacheConsolidado.versao === versaoCacheDados) {
+    return cacheConsolidado.dados;
+  }
+  if (!snapshotsImportados.length) {
+    cacheConsolidado = { versao: versaoCacheDados, dados: [] };
+    return [];
+  }
 
-  ordenados.forEach((snapshot) => {
-    const dados = normalizarBaseCompleta(Array.isArray(snapshot.data) ? snapshot.data : [], 'importada');
-    dados.forEach((item) => {
-      const chave = `${item.data}||${slug(item.loja)}||${item.rotinaId || slugChecklist(item.rotina)}`;
-      mapa.set(chave, item);
-    });
-  });
+  const respostas = obterRespostasPersistidas();
+  const datas = [...new Set([
+    ...snapshotsImportados
+      .filter((snapshot) => snapshot.dataLoaded !== false && Array.isArray(snapshot.data))
+      .map((snapshot) => formatarData(snapshot.latestDate))
+      .filter(Boolean),
+    ...respostas.map((item) => item.data).filter(Boolean)
+  ])].sort();
 
-  return [...mapa.values()];
+  const dados = datas.flatMap((data) => gerarResultadosBaseParaData(data, respostas).resultados);
+  cacheConsolidado = { versao: versaoCacheDados, dados };
+  return dados;
 }
 
 function aplicarBase(base, origem = 'simulada', detalhe = '') {
@@ -1688,7 +1818,11 @@ function aplicarBase(base, origem = 'simulada', detalhe = '') {
     renderizarPainel();
   }
   atualizarResumoAdmin();
-  popularControlesAdmin();
+  const adminModal = document.getElementById('adminModal');
+  const adminPanel = document.getElementById('adminPanelView');
+  if (adminModal && !adminModal.classList.contains('hidden') && adminPanel && !adminPanel.classList.contains('hidden')) {
+    popularControlesAdmin();
+  }
 
   if (origem === 'importada') {
     if (importBadge) importBadge.textContent = 'Planilhas ativas';
@@ -1792,6 +1926,7 @@ function extrairRespostasMoki(sheets) {
   const idxUnidade = encontrarIndiceCabecalho(cabecalho, ['unidade']);
   const idxCodigoUnidade = encontrarIndiceCabecalho(cabecalho, ['cod-da-unidade', 'codigo-da-unidade']);
   const idxAutor = encontrarIndiceCabecalho(cabecalho, ['autor']);
+  const idxStatus = encontrarIndiceCabecalho(cabecalho, ['status']);
 
   if ([idxChecklist, idxDataInicio].some((idx) => idx < 0) || (idxNomeUnidade < 0 && idxUnidade < 0)) {
     throw new Error('A planilha precisa conter CHECKLIST, DATA DE INÍCIO e NOME DA UNIDADE.');
@@ -1800,11 +1935,15 @@ function extrairRespostasMoki(sheets) {
   const respostas = [];
   const naoReconhecidos = [];
   const linhasInvalidas = [];
+  const naoEncerrados = [];
+  const datasDivergentes = [];
+  const lojasNaoAtivas = [];
   const rawData = [];
 
   linhas.slice(linhaCabecalho + 1).forEach((linha, index) => {
     if (!Array.isArray(linha) || !linha.some((valor) => String(valor ?? '').trim())) return;
 
+    const numeroLinha = linhaCabecalho + index + 2;
     const checklistOriginal = String(linha[idxChecklist] || '').trim();
     const lojaOriginal = String(
       (idxNomeUnidade >= 0 ? linha[idxNomeUnidade] : '')
@@ -1814,30 +1953,50 @@ function extrairRespostasMoki(sheets) {
     const dataReferenciaOriginal = idxDataReferencia >= 0 ? linha[idxDataReferencia] : '';
     const dataInicioOriginal = linha[idxDataInicio];
     const autor = idxAutor >= 0 ? String(linha[idxAutor] || '').trim() : '';
-    const codigoUnidade = idxCodigoUnidade >= 0 ? String(linha[idxCodigoUnidade] || '').trim() : '';
+    const codigoUnidade = normalizarCodigoUnidade(idxCodigoUnidade >= 0 ? linha[idxCodigoUnidade] : '');
     const idMoki = idxId >= 0 ? String(linha[idxId] || '').trim() : '';
+    const statusMoki = idxStatus >= 0 ? String(linha[idxStatus] || '').trim() : 'Encerrado';
     const dataHora = parseDataHoraMoki(dataInicioOriginal, dataReferenciaOriginal);
-    const data = formatarData(dataReferenciaOriginal) || dataHora.data;
-    const loja = renomearLojaSeNecessario(lojaOriginal);
+    const dataReferencia = formatarData(dataReferenciaOriginal) || dataHora.data;
+    const lojaAtiva = resolverLojaAtiva(lojaOriginal, codigoUnidade);
+    const loja = lojaAtiva?.nome || renomearLojaSeNecessario(lojaOriginal);
     const rotinaConfig = encontrarConfigRotinaPorNome(checklistOriginal);
 
     const raw = {
+      linha: numeroLinha,
       idMoki,
-      data,
+      data: dataReferencia,
+      dataInicio: dataHora.data,
       checklist: checklistOriginal,
       loja,
+      lojaOriginal,
       codigoUnidade,
+      statusMoki,
       dataHoraRealizada: dataHora.dataHoraIso,
       horaRealizada: dataHora.hora,
       autor
     };
+    rawData.push(raw);
 
-    if (!data || !checklistOriginal || !loja || !dataHora.hora) {
-      linhasInvalidas.push({ linha: linhaCabecalho + index + 2, ...raw });
+    if (!dataReferencia || !checklistOriginal || !lojaOriginal || !dataHora.hora) {
+      linhasInvalidas.push(raw);
       return;
     }
 
-    rawData.push(raw);
+    if (slug(statusMoki) !== 'encerrado') {
+      naoEncerrados.push(raw);
+      return;
+    }
+
+    if (dataHora.data && dataReferencia && dataHora.data !== dataReferencia) {
+      datasDivergentes.push(raw);
+      return;
+    }
+
+    if (!lojaAtiva) {
+      lojasNaoAtivas.push(raw);
+      return;
+    }
 
     if (!rotinaConfig) {
       naoReconhecidos.push(raw);
@@ -1846,6 +2005,9 @@ function extrairRespostasMoki(sheets) {
 
     respostas.push({
       ...raw,
+      data: dataReferencia,
+      loja: lojaAtiva.nome,
+      codigoUnidade: lojaAtiva.codigo,
       rotina: rotinaConfig.nome,
       rotinaId: rotinaConfig.id,
       promotor: autor
@@ -1853,7 +2015,11 @@ function extrairRespostasMoki(sheets) {
   });
 
   if (!rawData.length) {
-    throw new Error('Nenhuma resposta válida foi encontrada no relatório do Moki.');
+    throw new Error('Nenhuma linha foi encontrada no relatório do Moki.');
+  }
+
+  if (!respostas.length) {
+    throw new Error('Nenhuma resposta encerrada e válida corresponde às lojas e rotinas cadastradas no sistema.');
   }
 
   return {
@@ -1862,6 +2028,9 @@ function extrairRespostasMoki(sheets) {
     respostas,
     naoReconhecidos,
     linhasInvalidas,
+    naoEncerrados,
+    datasDivergentes,
+    lojasNaoAtivas,
     rawData
   };
 }
@@ -1889,43 +2058,83 @@ function mesclarRespostas(respostas = []) {
   return [...mapa.values()];
 }
 
-function obterRespostasAnteriores(data) {
-  return consolidarSnapshotsImportados()
-    .filter((item) => item.data === data && item.status === 'realizada' && item.rotinaId)
-    .map((item) => ({
-      data: item.data,
-      checklist: item.checklistOriginal || item.rotina,
-      loja: item.loja,
-      rotina: item.rotina,
-      rotinaId: item.rotinaId,
-      dataHoraRealizada: item.dataHoraRealizada || (item.horaRealizada ? `${item.data}T${item.horaRealizada}:00` : ''),
-      horaRealizada: item.horaRealizada,
-      autor: item.autor || item.promotor || '',
-      promotor: item.promotor || item.autor || ''
-    }));
+function normalizarRespostaPersistida(item = {}) {
+  const data = formatarData(item.data);
+  const lojaAtiva = resolverLojaAtiva(item.loja, item.codigoUnidade);
+  const rotina = obterConfigRotinaPorId(item.rotinaId) || encontrarConfigRotinaPorNome(item.rotina || item.checklistOriginal || item.checklist);
+  const statusInformado = String(item.status || '').trim();
+
+  if (!data || !lojaAtiva || !rotina) return null;
+  if (statusInformado && normalizarStatus(statusInformado) !== 'realizada') return null;
+
+  const horaMatch = String(item.dataHoraRealizada || '').match(/T(\d{2}:\d{2})/);
+  const horaRealizada = validarHorario(item.horaRealizada) || validarHorario(horaMatch?.[1]);
+  if (!horaRealizada) return null;
+
+  return {
+    data,
+    checklist: item.checklistOriginal || item.checklist || rotina.nomeMoki || rotina.nome,
+    loja: lojaAtiva.nome,
+    codigoUnidade: lojaAtiva.codigo,
+    rotina: rotina.nome,
+    rotinaId: rotina.id,
+    dataHoraRealizada: item.dataHoraRealizada || `${data}T${horaRealizada}:00`,
+    horaRealizada,
+    autor: item.autor || item.promotor || '',
+    promotor: item.promotor || item.autor || ''
+  };
 }
 
-function gerarResultadosParaData(data, respostasNovas = [], lojasExtras = []) {
-  const respostas = mesclarRespostas([...obterRespostasAnteriores(data), ...respostasNovas.filter((item) => item.data === data)]);
-  const lojasDasRespostas = respostas.map((item) => item.loja);
-  const lojas = obterLojasConhecidas([...lojasExtras, ...lojasDasRespostas]);
+function obterRespostasPersistidas() {
+  if (cacheRespostasPersistidas.versao === versaoCacheDados) {
+    return cacheRespostasPersistidas.respostas;
+  }
+
+  const mapa = new Map();
+  const ordenados = [...snapshotsImportados].sort((a, b) => new Date(a.importedAt || 0) - new Date(b.importedAt || 0));
+
+  ordenados.forEach((snapshot) => {
+    const linhas = Array.isArray(snapshot.data) ? snapshot.data : [];
+    linhas.forEach((item) => {
+      const resposta = normalizarRespostaPersistida(item);
+      if (!resposta) return;
+      const chave = chaveResposta(resposta.data, resposta.loja, resposta.rotinaId);
+      mapa.set(chave, escolherRespostaMaisAntiga(mapa.get(chave), resposta));
+    });
+  });
+
+  const respostas = [...mapa.values()];
+  cacheRespostasPersistidas = { versao: versaoCacheDados, respostas };
+  return respostas;
+}
+
+function obterRespostasAnteriores(data) {
+  return obterRespostasPersistidas().filter((item) => item.data === data);
+}
+
+function gerarResultadosBaseParaData(data, respostasInformadas = []) {
+  const respostas = mesclarRespostas(respostasInformadas.filter((item) => item.data === data));
+  const lojas = obterLojasConhecidas();
   const mapaRespostas = new Map(respostas.map((item) => [chaveResposta(item.data, item.loja, item.rotinaId), item]));
   const resultados = [];
   const foraDaProgramacao = [];
 
   respostas.forEach((resposta) => {
     const rotina = obterConfigRotinaPorId(resposta.rotinaId);
-    if (!rotina || !rotinaAplicaNaData(rotina, data) || !rotinaAplicaNaLoja(rotina, resposta.loja)) {
+    if (!rotina || !rotinaAplicaNaData(rotina, data) || !rotinaAplicaNaLoja(rotina, resposta.loja, data, resposta.codigoUnidade)) {
       foraDaProgramacao.push(resposta);
     }
   });
 
-  configRotinas.filter((rotina) => rotinaAplicaNaData(rotina, data)).forEach((rotina) => {
-    lojas.filter((loja) => rotinaAplicaNaLoja(rotina, loja)).forEach((loja, index) => {
+  const rotinasDoDia = configRotinas.filter((rotina) => rotinaAplicaNaData(rotina, data));
+  rotinasDoDia.forEach((rotina) => {
+    lojas.forEach((loja) => {
+      if (!rotinaAplicaNaLoja(rotina, loja, data)) return;
       const resposta = mapaRespostas.get(chaveResposta(data, loja, rotina.id));
       const status = resposta ? 'realizada' : 'pendente';
       const pontualidade = classificarPontualidade(rotina, resposta?.horaRealizada || '', status);
-      const lojaNormalizada = renomearLojaSeNecessario(loja);
+      const lojaAtiva = resolverLojaAtiva(loja);
+      const lojaNormalizada = lojaAtiva?.nome || loja;
       const lojaInfo = parseLoja(lojaNormalizada);
 
       resultados.push({
@@ -1933,6 +2142,7 @@ function gerarResultadosParaData(data, respostasNovas = [], lojasExtras = []) {
         data,
         rede: lojaInfo.rede,
         loja: lojaInfo.loja,
+        codigoUnidade: lojaAtiva?.codigo || '',
         unidade: lojaInfo.unidade,
         formador: resolverFormador(lojaInfo.loja),
         promotor: resposta?.promotor || resposta?.autor || resolverPromotor(lojaInfo.loja),
@@ -1955,7 +2165,29 @@ function gerarResultadosParaData(data, respostasNovas = [], lojasExtras = []) {
     });
   });
 
-  return { resultados, foraDaProgramacao };
+  return { resultados, foraDaProgramacao, respostasMescladas: respostas };
+}
+
+function gerarResultadosParaData(data, respostasNovas = []) {
+  const respostas = mesclarRespostas([
+    ...obterRespostasAnteriores(data),
+    ...respostasNovas.filter((item) => item.data === data)
+  ]);
+  return gerarResultadosBaseParaData(data, respostas);
+}
+
+function compactarRespostaParaPersistencia(resposta = {}) {
+  return {
+    data: resposta.data,
+    loja: resposta.loja,
+    codigoUnidade: normalizarCodigoUnidade(resposta.codigoUnidade),
+    rotinaId: resposta.rotinaId,
+    checklist: resposta.checklist || resposta.checklistOriginal || '',
+    horaRealizada: resposta.horaRealizada,
+    dataHoraRealizada: resposta.dataHoraRealizada || '',
+    autor: resposta.autor || '',
+    promotor: resposta.promotor || resposta.autor || ''
+  };
 }
 
 function resumirResultadosImportacao(resultados = []) {
@@ -1979,12 +2211,11 @@ function processarPlanilhaMoki(sheets) {
     throw new Error('Nenhuma resposta corresponde às rotinas cadastradas no sistema.');
   }
 
-  const lojasExtras = extracao.respostas.map((item) => item.loja);
   const resultados = [];
   const foraDaProgramacao = [];
 
   datas.forEach((data) => {
-    const gerado = gerarResultadosParaData(data, extracao.respostas, lojasExtras);
+    const gerado = gerarResultadosParaData(data, extracao.respostas);
     resultados.push(...gerado.resultados);
     foraDaProgramacao.push(...gerado.foraDaProgramacao);
   });
@@ -2202,6 +2433,9 @@ function renderizarPreviewImportacao() {
     const avisos = [];
     if (item.processamento.naoReconhecidos.length) avisos.push(`${item.processamento.naoReconhecidos.length} checklist(s) não reconhecido(s)`);
     if (item.processamento.linhasInvalidas.length) avisos.push(`${item.processamento.linhasInvalidas.length} linha(s) inválida(s)`);
+    if (item.processamento.naoEncerrados.length) avisos.push(`${item.processamento.naoEncerrados.length} resposta(s) em aberto ignorada(s)`);
+    if (item.processamento.datasDivergentes.length) avisos.push(`${item.processamento.datasDivergentes.length} resposta(s) com data de início divergente`);
+    if (item.processamento.lojasNaoAtivas.length) avisos.push(`${item.processamento.lojasNaoAtivas.length} resposta(s) de loja não ativa`);
     if (item.processamento.foraDaProgramacao.length) avisos.push(`${item.processamento.foraDaProgramacao.length} resposta(s) fora da programação`);
 
     return `<div class="preview-card">
@@ -2298,6 +2532,7 @@ function substituirSnapshotLocal(snapshot) {
     snapshotsImportados.push(snapshot);
   }
   snapshotsImportados.sort((a, b) => new Date(b.importedAt) - new Date(a.importedAt));
+  invalidarCacheDados();
 }
 
 async function importarArquivo() {
@@ -2320,17 +2555,12 @@ async function importarArquivo() {
   const respostasNovas = mesclarRespostas(previewsValidas.flatMap((item) => item.respostas || []));
   const rawData = previewsValidas.flatMap((item) => item.rawData || []);
   const datas = [...new Set(respostasNovas.map((item) => item.data).filter(Boolean))].sort();
-  const lojasImportadas = respostasNovas.map((item) => item.loja);
   const nomesArquivos = [...new Set(previewsValidas.map((item) => item.fileName))];
 
   if (!datas.length) {
     setImportStatus('Nenhuma data válida foi identificada nas respostas do Moki.', 'Falha na importação');
     return;
   }
-
-  registrarLojasConhecidas(lojasImportadas, false);
-  salvarStore(STORAGE_KEYS.knownStores, [...lojasConhecidas].sort((a, b) => a.localeCompare(b, 'pt-BR')));
-  salvarConfigNoFirebase();
 
   setImportStatus(
     datas.length === 1
@@ -2349,28 +2579,31 @@ async function importarArquivo() {
 
   for (const data of datas) {
     const respostasData = respostasNovas.filter((item) => item.data === data);
-    const gerado = gerarResultadosParaData(data, respostasData, lojasImportadas);
+    const gerado = gerarResultadosParaData(data, respostasData);
     const resultados = normalizarBaseCompleta(gerado.resultados, 'importada');
     const summary = resumirResultadosImportacao(resultados);
     const agora = new Date();
     const snapshotId = `rotinas-${data}`;
+    const rawDataDia = rawData.filter((item) => item.data === data);
+    const respostasPersistidas = gerado.respostasMescladas.map(compactarRespostaParaPersistencia);
     const snapshot = {
       id: snapshotId,
       fileName: nomesArquivos.join(' + '),
       importedAt: agora.toISOString(),
       total: resultados.length,
-      responsesCount: respostasData.length,
+      responsesCount: respostasPersistidas.length,
       latestDate: data,
-      data: resultados,
-      rawData: rawData.filter((item) => item.data === data),
-      rawRowsCount: rawData.filter((item) => item.data === data).length,
+      data: respostasPersistidas,
+      dataKind: 'responses',
+      rawData: rawDataDia,
+      rawRowsCount: rawDataDia.length,
       rawExpiresAt: dataExpiracaoDadosBrutos(agora),
       rawAvailable: true,
       rawDeletedAt: '',
       summary,
       chunksCount: 0,
       rawChunksCount: 0,
-      schemaVersion: 3
+      schemaVersion: RESULT_SCHEMA_VERSION
     };
 
     const sincronizado = firebaseDisponivel ? await salvarSnapshotNoFirebase(snapshot) : true;
@@ -2417,6 +2650,7 @@ async function resetarParaSimulada() {
   const idsAnteriores = snapshotsImportados.map((snapshot) => snapshot.id).filter(Boolean);
   const totalAnterior = snapshotsImportados.length;
   snapshotsImportados = [];
+  invalidarCacheDados();
   persistirSnapshotsLocais();
   if (fileInput) fileInput.value = '';
   previewsImportacao = [];
@@ -2436,11 +2670,9 @@ async function resetarParaSimulada() {
 
 function aplicarRegrasAdministrativasNaBaseAtual() {
   const temSnapshots = snapshotsImportados.length > 0;
-  registrosBase = normalizarBaseCompleta(registrosBase, temSnapshots ? 'importada' : 'simulada');
-  if (temSnapshots) {
-    snapshotsImportados = snapshotsImportados.map((item) => ({ ...item, data: normalizarBaseCompleta(item.data, 'importada') }));
-    persistirSnapshotsLocais();
-  }
+  invalidarCacheDados();
+  registrosBase = temSnapshots ? consolidarSnapshotsImportados() : normalizarBaseCompleta(registrosSimulados, 'simulada');
+  persistirSnapshotsLocais();
   aplicarBase(registrosBase, temSnapshots ? 'importada' : 'simulada', importSummary?.textContent || 'Base atualizada.');
 }
 
@@ -2508,6 +2740,7 @@ async function salvarRegraRotina() {
     toleranciaInicioMin,
     toleranciaFimMin
   } : item);
+  invalidarCacheDados();
 
   salvarStore(STORAGE_KEYS.routineConfig, configRotinas);
   const sincronizado = await salvarConfigNoFirebase();
@@ -2573,8 +2806,11 @@ function renderHistoricoPlanilhas() {
   container.innerHTML = snapshotsImportados.map((snapshot) => {
     const dataImportacao = new Date(snapshot.importedAt).toLocaleString('pt-BR');
     const dataReferencia = snapshot.latestDate ? snapshot.latestDate.split('-').reverse().join('/') : 'não identificada';
-    const dadosSnapshot = normalizarBaseCompleta(snapshot.data || [], 'importada');
-    const resumo = dadosSnapshot.length ? resumirResultadosImportacao(dadosSnapshot) : (snapshot.summary || {});
+    const resumo = snapshot.summary || (() => {
+      const data = formatarData(snapshot.latestDate);
+      if (!data) return {};
+      return resumirResultadosImportacao(gerarResultadosBaseParaData(data, obterRespostasPersistidas()).resultados);
+    })();
     const rawDisponivel = snapshot.rawAvailable !== false && snapshot.rawExpiresAt && !dadosBrutosExpirados(snapshot);
     const expiraTexto = snapshot.rawExpiresAt ? new Date(snapshot.rawExpiresAt).toLocaleString('pt-BR') : '';
     const statusRaw = rawDisponivel
@@ -2645,9 +2881,25 @@ function salvarNovoNomeLoja() {
 async function usarSnapshot(snapshotId) {
   const snapshot = snapshotsImportados.find((item) => item.id === snapshotId);
   if (!snapshot) return;
-  const dadosAtualizados = normalizarBaseCompleta(snapshot.data, 'importada');
-  const atualizado = { ...snapshot, data: dadosAtualizados, summary: resumirResultadosImportacao(dadosAtualizados) };
+
+  const data = formatarData(snapshot.latestDate);
+  const respostas = (Array.isArray(snapshot.data) ? snapshot.data : [])
+    .map(normalizarRespostaPersistida)
+    .filter(Boolean);
+  const gerado = data ? gerarResultadosBaseParaData(data, respostas) : { resultados: [] };
+  const dadosPersistidos = respostas.map(compactarRespostaParaPersistencia);
+  const atualizado = {
+    ...snapshot,
+    data: dadosPersistidos,
+    dataKind: 'responses',
+    schemaVersion: RESULT_SCHEMA_VERSION,
+    responsesCount: dadosPersistidos.length,
+    total: gerado.resultados.length,
+    summary: resumirResultadosImportacao(gerado.resultados)
+  };
+
   snapshotsImportados = snapshotsImportados.map((item) => item.id === snapshotId ? atualizado : item);
+  invalidarCacheDados();
   persistirSnapshotsLocais();
   atualizarBasePorSnapshots(`Planilha ${snapshot.fileName} reprocessada e aplicada no painel.`);
   const sincronizado = await salvarSnapshotNoFirebase(atualizado);
@@ -2663,6 +2915,7 @@ async function excluirSnapshot(snapshotId) {
   const snapshot = snapshotsImportados.find((item) => item.id === snapshotId);
   if (!snapshot) return;
   snapshotsImportados = snapshotsImportados.filter((item) => item.id !== snapshotId);
+  invalidarCacheDados();
   persistirSnapshotsLocais();
   atualizarBasePorSnapshots(
     snapshotsImportados.length
@@ -2892,7 +3145,6 @@ function inicializarBaseAtiva() {
     registrosBase = normalizarBaseCompleta(registrosSimulados, 'simulada');
     aplicarBase(registrosBase, 'simulada', 'Painel sem dados. Importe uma ou mais planilhas para carregar as rotinas.');
   }
-  renderHistoricoPlanilhas();
 }
 
 
@@ -3427,7 +3679,7 @@ function inicializarAplicacao() {
   configurarAbasResumo();
   configurarApresentacao();
   salvarStore(STORAGE_KEYS.routineConfig, configRotinas);
-  salvarStore(STORAGE_KEYS.knownStores, [...lojasConhecidas].sort((a, b) => a.localeCompare(b, 'pt-BR')));
+  salvarStore(STORAGE_KEYS.knownStores, LOJAS_ATIVAS.map((loja) => loja.nome));
   inicializarBaseAtiva();
   agendarLimpezaDadosBrutos();
   autoAbrirApresentacaoSeSolicitado();
