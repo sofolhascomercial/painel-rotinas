@@ -23,6 +23,7 @@ let firebaseListenersIniciados = false;
 let firebaseInicializado = false;
 let firebaseConfigRecebida = false;
 let firebaseSnapshotsRecebidos = false;
+let firebaseResumosRecebidos = false;
 let aplicarEstadoRemotoTimer = null;
 let resumoPeriodoAtual = 'diario';
 
@@ -41,10 +42,13 @@ const STORAGE_KEYS = {
   adminLogged: 'sf_admin_logged',
   storeFormadorMap: 'sf_store_formador_map',
   storePromotorMap: 'sf_store_promotor_map',
+  storeRegionalMap: 'sf_store_regional_map',
+  regionalMapReviewed: 'sf_regional_map_reviewed',
   storeRenameMap: 'sf_store_rename_map',
   routineConfig: 'sf_routine_config',
   knownStores: 'sf_known_stores',
   importedSnapshots: 'sf_imported_snapshots',
+  dailySummaries: 'sf_daily_summaries',
   activeSnapshotId: 'sf_active_snapshot_id',
   appVersion: 'sf_app_version'
 };
@@ -56,11 +60,14 @@ const ADMIN_CREDENTIALS = {
 
 const FORMADORES_ATIVOS = ['Luciano', 'Karina', 'Luana'];
 const FORMADORES_ATIVOS_SLUG = new Set(FORMADORES_ATIVOS.map((item) => slug(item)));
-const APP_STORAGE_VERSION = '2026-07-27-lojas-ativas-v5';
+const APP_STORAGE_VERSION = '2026-07-28-rotinas-dinamicas-v8';
 const RESULT_SCHEMA_VERSION = 4;
 
 const PRAZO_DADOS_BRUTOS_DIAS = 5;
 const INTERVALO_LIMPEZA_DADOS_BRUTOS_MS = 60 * 60 * 1000;
+const LIMITE_DIAS_DETALHES_INICIAIS = 45;
+const LIMITE_RESUMOS_HISTORICOS = 370;
+const LIMITE_DIAS_CONSULTA_DETALHADA = 90;
 
 const ROTINAS_PADRAO = [
   { id: 'rotina-01', nome: '01º Promotor - Fotos abertura do dia Até 6h30', nomeMoki: '01º Promotor - Fotos abertura do dia Até 6h30', horarioInicio: '', horarioFim: '06:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
@@ -152,6 +159,21 @@ const CODIGOS_LOJAS_12X36 = new Set(['009', '022', '013', '079', '081', '082', '
 const LOJAS_FIXAS_12X36 = LOJAS_ATIVAS.filter((loja) => CODIGOS_LOJAS_12X36.has(loja.codigo)).map((loja) => loja.nome);
 const LOJAS_ATIVAS_POR_CODIGO = new Map(LOJAS_ATIVAS.map((loja) => [loja.codigo, loja]));
 const LOJAS_ATIVAS_POR_SLUG = new Map(LOJAS_ATIVAS.map((loja) => [slug(loja.nome), loja]));
+
+
+const REGIONAIS = [
+  { id: 'df_go', nome: 'Regional DF/GO', nomeCurto: 'DF/GO' },
+  { id: 'goiania_fora', nome: 'Regional Goiânia – Lojas Fora', nomeCurto: 'Goiânia – Lojas Fora' }
+];
+const REGIONAIS_POR_ID = new Map(REGIONAIS.map((regional) => [regional.id, regional]));
+const CODIGOS_REGIONAL_GOIANIA_FORA = new Set([
+  '085', '086', '080', '083', '059', '081', '058', '084', '082', '079',
+  '019', '015', '025', '020', '014', '034', '021', '026'
+]);
+const defaultLojaRegionalMap = LOJAS_ATIVAS.reduce((acc, loja) => {
+  acc[loja.codigo] = CODIGOS_REGIONAL_GOIANIA_FORA.has(loja.codigo) ? 'goiania_fora' : 'df_go';
+  return acc;
+}, {});
 
 const registrosSimulados = [];
 
@@ -316,9 +338,9 @@ function setImportStatus(summaryText, badgeText = '') {
 }
 
 function adminPainelEstaVisivel() {
-  const modal = document.getElementById('adminModal');
+  const experiencia = document.getElementById('adminModal');
   const painel = document.getElementById('adminPanelView');
-  return Boolean(modal && painel && !modal.classList.contains('hidden') && !painel.classList.contains('hidden'));
+  return Boolean(experiencia && painel && !experiencia.classList.contains('hidden') && !painel.classList.contains('hidden'));
 }
 
 const formatarNumero = new Intl.NumberFormat('pt-BR');
@@ -347,17 +369,55 @@ function sanitizarMapaFormadores(mapa = {}) {
   }, {});
 }
 
+
+function sanitizarMapaRegionais(mapa = {}) {
+  return LOJAS_ATIVAS.reduce((acc, loja) => {
+    const informado = mapa?.[loja.codigo] || mapa?.[String(Number(loja.codigo))] || '';
+    if (REGIONAIS_POR_ID.has(informado) || informado === 'sem_regional') acc[loja.codigo] = informado;
+    return acc;
+  }, {});
+}
+
+function resolverRegional(loja = '', codigoUnidade = '') {
+  const lojaAtiva = resolverLojaAtiva(loja, codigoUnidade);
+  const codigo = lojaAtiva?.codigo || normalizarCodigoUnidade(codigoUnidade);
+  const regionalId = codigo ? lojaRegionalMap?.[codigo] : '';
+  const regional = REGIONAIS_POR_ID.get(regionalId);
+  return regional ? { ...regional } : { id: 'sem_regional', nome: 'Sem regional', nomeCurto: 'Sem regional' };
+}
+
+function registroPertenceRegional(item, regionalId = regionalSelecionada) {
+  if (!regionalId || regionalId === 'geral') return true;
+  return resolverRegional(item?.loja, item?.codigoUnidade).id === regionalId;
+}
+
 migrarArmazenamentoSeNecessario();
 
 let lojaFormadorMap = sanitizarMapaFormadores({ ...defaultLojaFormadorMap, ...normalizarMapaChaves(carregarStore(STORAGE_KEYS.storeFormadorMap, {})) });
 let lojaPromotorMap = normalizarMapaChaves(carregarStore(STORAGE_KEYS.storePromotorMap, {}));
+let lojaRegionalMap = sanitizarMapaRegionais({ ...defaultLojaRegionalMap, ...carregarStore(STORAGE_KEYS.storeRegionalMap, {}) });
+let regionalSelecionada = 'geral';
+let regionalMapRevisado = localStorage.getItem(STORAGE_KEYS.regionalMapReviewed) === '1';
 let lojaRenameMap = normalizarMapaChaves({ ...defaultLojaRenameMap, ...carregarStore(STORAGE_KEYS.storeRenameMap, {}) });
 let configRotinas = normalizarConfiguracoesRotinas(carregarStore(STORAGE_KEYS.routineConfig, ROTINAS_PADRAO));
 let lojasConhecidas = new Set(LOJAS_ATIVAS.map((loja) => loja.nome));
 let snapshotsImportados = carregarStore(STORAGE_KEYS.importedSnapshots, []);
+let snapshotsRecentes = [...snapshotsImportados];
+let snapshotsSobDemanda = [];
+let resumosDiarios = carregarStore(STORAGE_KEYS.dailySummaries, []);
+let periodoSobDemandaAtual = { dataInicial: '', dataFinal: '' };
+let carregamentoPeriodoPromise = null;
+let limiteHistoricoVisivel = 30;
 let versaoCacheDados = 0;
 let cacheConsolidado = { versao: -1, dados: [] };
 let cacheRespostasPersistidas = { versao: -1, respostas: [] };
+
+snapshotsRecentes = snapshotsRecentes
+  .filter((item) => item && item.id)
+  .sort((a, b) => String(b.latestDate || '').localeCompare(String(a.latestDate || '')))
+  .slice(0, LIMITE_DIAS_DETALHES_INICIAIS);
+resumosDiarios = resumosDiarios.map(normalizarResumoDiario).filter(Boolean).slice(0, LIMITE_RESUMOS_HISTORICOS);
+snapshotsImportados = [...snapshotsRecentes];
 
 function invalidarCacheDados() {
   versaoCacheDados += 1;
@@ -374,16 +434,26 @@ lojaFormadorMap = sanitizarMapaFormadores(lojaFormadorMap);
 salvarStore(STORAGE_KEYS.storeFormadorMap, lojaFormadorMap);
 lojaRenameMap = normalizarMapaChaves({ ...defaultLojaRenameMap, ...lojaRenameMap });
 salvarStore(STORAGE_KEYS.storeRenameMap, lojaRenameMap);
+salvarStore(STORAGE_KEYS.storeRegionalMap, lojaRegionalMap);
 
 function migrarArmazenamentoSeNecessario() {
   const versaoAtual = localStorage.getItem(STORAGE_KEYS.appVersion);
   if (versaoAtual === APP_STORAGE_VERSION) return;
 
   localStorage.removeItem(STORAGE_KEYS.activeSnapshotId);
-  localStorage.removeItem(STORAGE_KEYS.storePromotorMap);
   localStorage.removeItem(STORAGE_KEYS.knownStores);
-  localStorage.setItem(STORAGE_KEYS.storeRenameMap, JSON.stringify(defaultLojaRenameMap));
-  localStorage.setItem(STORAGE_KEYS.storeFormadorMap, JSON.stringify(defaultLojaFormadorMap));
+  if (!localStorage.getItem(STORAGE_KEYS.storeRenameMap)) {
+    localStorage.setItem(STORAGE_KEYS.storeRenameMap, JSON.stringify(defaultLojaRenameMap));
+  }
+  if (!localStorage.getItem(STORAGE_KEYS.storeFormadorMap)) {
+    localStorage.setItem(STORAGE_KEYS.storeFormadorMap, JSON.stringify(defaultLojaFormadorMap));
+  }
+  if (!localStorage.getItem(STORAGE_KEYS.storeRegionalMap)) {
+    localStorage.setItem(STORAGE_KEYS.storeRegionalMap, JSON.stringify(defaultLojaRegionalMap));
+  }
+  if (!localStorage.getItem(STORAGE_KEYS.regionalMapReviewed)) {
+    localStorage.setItem(STORAGE_KEYS.regionalMapReviewed, '0');
+  }
   localStorage.setItem(STORAGE_KEYS.knownStores, JSON.stringify(LOJAS_ATIVAS.map((loja) => loja.nome)));
   localStorage.setItem(STORAGE_KEYS.appVersion, APP_STORAGE_VERSION);
 }
@@ -407,21 +477,61 @@ function salvarStore(chave, valor) {
   }
 }
 
+function normalizarResumoDiario(item = {}) {
+  const data = formatarData(item.data || item.latestDate);
+  if (!data) return null;
+  return {
+    id: item.id || `rotinas-${data}`,
+    fileName: item.fileName || `Rotinas ${data.split('-').reverse().join('/')}`,
+    importedAt: valorDataParaIso(item.importedAt, new Date().toISOString()),
+    latestDate: data,
+    total: Number(item.total || item.summary?.previstas || 0),
+    responsesCount: Number(item.responsesCount || item.summary?.realizadas || 0),
+    summary: item.summary || {},
+    rawExpiresAt: valorDataParaIso(item.rawExpiresAt, ''),
+    rawAvailable: item.rawAvailable !== false,
+    rawRowsCount: Number(item.rawRowsCount || 0),
+    rawDeletedAt: valorDataParaIso(item.rawDeletedAt, ''),
+    chunksCount: Number(item.chunksCount || 0),
+    rawChunksCount: Number(item.rawChunksCount || 0),
+    dataKind: item.dataKind || 'responses',
+    schemaVersion: Number(item.schemaVersion || RESULT_SCHEMA_VERSION)
+  };
+}
+
+function persistirResumosLocais() {
+  const leves = resumosDiarios
+    .map(normalizarResumoDiario)
+    .filter(Boolean)
+    .sort((a, b) => b.latestDate.localeCompare(a.latestDate))
+    .slice(0, LIMITE_RESUMOS_HISTORICOS);
+  salvarStore(STORAGE_KEYS.dailySummaries, leves);
+}
+
+function recomporSnapshotsAtivos() {
+  const mapa = new Map();
+  [...snapshotsRecentes, ...snapshotsSobDemanda].forEach((item) => {
+    if (!item?.id) return;
+    mapa.set(item.id, item);
+  });
+  snapshotsImportados = [...mapa.values()].sort((a, b) => String(b.latestDate || '').localeCompare(String(a.latestDate || '')));
+  invalidarCacheDados();
+}
+
 function persistirSnapshotsLocais() {
+  const fonte = [...snapshotsRecentes]
+    .sort((a, b) => String(b.latestDate || '').localeCompare(String(a.latestDate || '')))
+    .slice(0, LIMITE_DIAS_DETALHES_INICIAIS);
+
   if (!firebaseDisponivel) {
-    salvarStore(STORAGE_KEYS.importedSnapshots, snapshotsImportados.map((item) => ({ ...item, rawData: undefined })));
+    salvarStore(STORAGE_KEYS.importedSnapshots, fonte.map((item) => ({ ...item, rawData: undefined })));
+    persistirResumosLocais();
     return;
   }
 
-  const recentes = new Set(
-    [...snapshotsImportados]
-      .sort((a, b) => new Date(b.importedAt || 0) - new Date(a.importedAt || 0))
-      .slice(0, 7)
-      .map((item) => item.id)
-  );
-
-  const resumo = snapshotsImportados.map((item) => {
-    const manterDadosLocais = recentes.has(item.id) && Array.isArray(item.data);
+  const recentesComDados = new Set(fonte.slice(0, 7).map((item) => item.id));
+  const resumo = fonte.map((item) => {
+    const manterDadosLocais = recentesComDados.has(item.id) && Array.isArray(item.data);
     return {
       id: item.id,
       fileName: item.fileName,
@@ -444,6 +554,7 @@ function persistirSnapshotsLocais() {
   });
 
   salvarStore(STORAGE_KEYS.importedSnapshots, resumo);
+  persistirResumosLocais();
 }
 
 function atualizarBasePorSnapshots(detalhe = '') {
@@ -497,6 +608,8 @@ async function salvarConfigNoFirebase() {
       appVersion: APP_STORAGE_VERSION,
       storeFormadorMap: sanitizarMapaFormadores(lojaFormadorMap),
       storePromotorMap: lojaPromotorMap,
+      storeRegionalMap: sanitizarMapaRegionais(lojaRegionalMap),
+      regionalMapReviewed: regionalMapRevisado,
       storeRenameMap: lojaRenameMap,
       routineConfig: configRotinas,
       knownStores: LOJAS_ATIVAS.map((loja) => loja.nome),
@@ -639,9 +752,11 @@ async function excluirSnapshotNoFirebase(snapshotId) {
 async function limparSnapshotsNoFirebase(idsInformados = null) {
   if (!firebaseDisponivel || !firebaseApi || !db) return false;
   try {
-    const ids = Array.isArray(idsInformados)
-      ? [...new Set(idsInformados.filter(Boolean))]
-      : [...new Set(snapshotsImportados.map((snapshot) => snapshot.id).filter(Boolean))];
+    let ids = Array.isArray(idsInformados) ? [...new Set(idsInformados.filter(Boolean))] : [];
+    if (!ids.length) {
+      const metas = await firebaseApi.getDocs(snapshotsCollectionRef);
+      ids = metas.docs.map((item) => item.id);
+    }
     for (const snapshotId of ids) {
       await excluirSnapshotNoFirebase(snapshotId);
     }
@@ -780,6 +895,8 @@ function iniciarFirebaseSync() {
       ...normalizarMapaChaves(remoto.storeFormadorMap || lojaFormadorMap)
     });
     lojaPromotorMap = normalizarMapaChaves(remoto.storePromotorMap || lojaPromotorMap);
+    lojaRegionalMap = sanitizarMapaRegionais({ ...defaultLojaRegionalMap, ...(remoto.storeRegionalMap || lojaRegionalMap) });
+    if (typeof remoto.regionalMapReviewed === 'boolean') regionalMapRevisado = remoto.regionalMapReviewed;
     lojaRenameMap = normalizarMapaChaves({
       ...defaultLojaRenameMap,
       ...normalizarMapaChaves(remoto.storeRenameMap || lojaRenameMap)
@@ -789,6 +906,8 @@ function iniciarFirebaseSync() {
 
     salvarStore(STORAGE_KEYS.storeFormadorMap, lojaFormadorMap);
     salvarStore(STORAGE_KEYS.storePromotorMap, lojaPromotorMap);
+    salvarStore(STORAGE_KEYS.storeRegionalMap, lojaRegionalMap);
+    localStorage.setItem(STORAGE_KEYS.regionalMapReviewed, regionalMapRevisado ? '1' : '0');
     salvarStore(STORAGE_KEYS.storeRenameMap, lojaRenameMap);
     salvarStore(STORAGE_KEYS.routineConfig, configRotinas);
     salvarStore(STORAGE_KEYS.knownStores, LOJAS_ATIVAS.map((loja) => loja.nome));
@@ -800,17 +919,38 @@ function iniciarFirebaseSync() {
     console.error('Erro ao sincronizar configurações do Firebase:', error);
   });
 
-  firebaseApi.onSnapshot(firebaseApi.query(snapshotsCollectionRef, firebaseApi.orderBy('importedAt', 'desc')), async (snapshot) => {
-    const metas = snapshot.docs.map((item) => normalizarSnapshotFirebase({ id: item.id, ...item.data() }));
-    const completos = await carregarSnapshotsEmLotes(metas);
+  const consultaResumos = firebaseApi.query(
+    snapshotsCollectionRef,
+    firebaseApi.orderBy('latestDate', 'desc'),
+    firebaseApi.limit(LIMITE_RESUMOS_HISTORICOS)
+  );
 
-    snapshotsImportados = completos;
-    invalidarCacheDados();
+  firebaseApi.onSnapshot(consultaResumos, (snapshot) => {
+    resumosDiarios = snapshot.docs
+      .map((item) => normalizarResumoDiario({ id: item.id, ...item.data() }))
+      .filter(Boolean);
+    firebaseResumosRecebidos = true;
+    persistirResumosLocais();
+    if (adminPainelEstaVisivel()) renderHistoricoPlanilhas();
+  }, (error) => {
+    console.error('Erro ao sincronizar resumos diários do Firebase:', error);
+  });
+
+  const consultaDetalhesRecentes = firebaseApi.query(
+    snapshotsCollectionRef,
+    firebaseApi.orderBy('latestDate', 'desc'),
+    firebaseApi.limit(LIMITE_DIAS_DETALHES_INICIAIS)
+  );
+
+  firebaseApi.onSnapshot(consultaDetalhesRecentes, async (snapshot) => {
+    const metas = snapshot.docs.map((item) => normalizarSnapshotFirebase({ id: item.id, ...item.data() }));
+    snapshotsRecentes = await carregarSnapshotsEmLotes(metas);
+    recomporSnapshotsAtivos();
     persistirSnapshotsLocais();
     firebaseSnapshotsRecebidos = true;
     if (firebaseInicializado) agendarAplicacaoEstadoRemoto();
   }, (error) => {
-    console.error('Erro ao sincronizar planilhas do Firebase:', error);
+    console.error('Erro ao sincronizar detalhes recentes do Firebase:', error);
   });
 }
 
@@ -866,25 +1006,84 @@ function tituloCaso(texto) {
     .join(' ');
 }
 
-function normalizarConfiguracoesRotinas(configuracoes = []) {
-  const recebidas = new Map((Array.isArray(configuracoes) ? configuracoes : []).map((item) => [item.id, item]));
-  return ROTINAS_PADRAO.map((padrao) => {
-    const salvo = recebidas.get(padrao.id) || {};
-    return {
-      ...padrao,
-      ...salvo,
-      id: padrao.id,
-      nome: padrao.nome,
-      nomeMoki: String(salvo.nomeMoki || padrao.nomeMoki || padrao.nome).trim(),
-      horarioInicio: validarHorario(salvo.horarioInicio ?? padrao.horarioInicio),
-      horarioFim: validarHorario(salvo.horarioFim ?? padrao.horarioFim),
-      toleranciaInicioMin: limitarInteiro(salvo.toleranciaInicioMin ?? padrao.toleranciaInicioMin, 0, 1440),
-      toleranciaFimMin: limitarInteiro(salvo.toleranciaFimMin ?? padrao.toleranciaFimMin, 0, 1440),
-      dias: Array.isArray(padrao.dias) ? [...padrao.dias] : [0,1,2,3,4,5,6],
-      escopo: padrao.escopo,
-      ativa: salvo.ativa !== false
-    };
+function normalizarDataIsoSimples(valor = '') {
+  const texto = String(valor || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(texto) && dataIsoParaDate(texto) ? texto : '';
+}
+
+function normalizarAliasesRotina(aliases = []) {
+  const itens = Array.isArray(aliases)
+    ? aliases
+    : String(aliases || '').split(/[\n;,]+/g);
+  const mapa = new Map();
+  itens.forEach((item) => {
+    const texto = String(item || '').trim().replace(/\s+/g, ' ');
+    const chave = slugChecklist(texto);
+    if (texto && chave && !mapa.has(chave)) mapa.set(chave, texto);
   });
+  return [...mapa.values()];
+}
+
+function normalizarRotinaConfigurada(item = {}, padrao = null, ordemFallback = 0) {
+  const base = padrao || {};
+  const id = String(item.id || base.id || '').trim();
+  const nome = String(item.nome || base.nome || '').trim().replace(/\s+/g, ' ');
+  if (!id || !nome) return null;
+
+  const nomeMoki = String(item.nomeMoki || base.nomeMoki || nome).trim().replace(/\s+/g, ' ');
+  const aliases = normalizarAliasesRotina(item.aliases || base.aliases || [])
+    .filter((alias) => ![nome, nomeMoki].some((valor) => slugChecklist(valor) === slugChecklist(alias)));
+  const diasBase = Array.isArray(item.dias) ? item.dias : (Array.isArray(base.dias) ? base.dias : [1,2,3,4,5,6]);
+  const dias = [...new Set(diasBase.map(Number).filter((dia) => Number.isInteger(dia) && dia >= 0 && dia <= 6))].sort((a, b) => a - b);
+  const vigenciaInicio = normalizarDataIsoSimples(item.vigenciaInicio || base.vigenciaInicio || '');
+  const vigenciaFim = normalizarDataIsoSimples(item.vigenciaFim || base.vigenciaFim || '');
+  const ativaInformada = item.ativa ?? base.ativa;
+
+  return {
+    ...base,
+    ...item,
+    id,
+    nome,
+    nomeMoki: nomeMoki || nome,
+    aliases,
+    horarioInicio: validarHorario(item.horarioInicio ?? base.horarioInicio),
+    horarioFim: validarHorario(item.horarioFim ?? base.horarioFim),
+    toleranciaInicioMin: limitarInteiro(item.toleranciaInicioMin ?? base.toleranciaInicioMin, 0, 1440),
+    toleranciaFimMin: limitarInteiro(item.toleranciaFimMin ?? base.toleranciaFimMin, 0, 1440),
+    dias: dias.length ? dias : [1,2,3,4,5,6],
+    escopo: (item.escopo || base.escopo) === '12x36' ? '12x36' : 'todas',
+    ativa: ativaInformada !== false,
+    vigenciaInicio,
+    vigenciaFim,
+    origem: padrao ? 'padrao' : (item.origem === 'padrao' ? 'padrao' : 'personalizada'),
+    ordem: Number.isFinite(Number(item.ordem)) ? Number(item.ordem) : ordemFallback,
+    createdAt: valorDataParaIso(item.createdAt, padrao ? '' : new Date().toISOString()),
+    updatedAt: valorDataParaIso(item.updatedAt, ''),
+    firstUsedAt: valorDataParaIso(item.firstUsedAt, ''),
+    lastUsedAt: valorDataParaIso(item.lastUsedAt, '')
+  };
+}
+
+function normalizarConfiguracoesRotinas(configuracoes = []) {
+  const recebidas = Array.isArray(configuracoes) ? configuracoes.filter(Boolean) : [];
+  const recebidasPorId = new Map(recebidas.map((item) => [String(item.id || '').trim(), item]));
+  const padroesPorId = new Map(ROTINAS_PADRAO.map((item) => [item.id, item]));
+  const resultado = [];
+
+  ROTINAS_PADRAO.forEach((padrao, index) => {
+    const salvo = recebidasPorId.get(padrao.id) || {};
+    const rotina = normalizarRotinaConfigurada({ ...padrao, ...salvo, id: padrao.id }, padrao, index + 1);
+    if (rotina) resultado.push(rotina);
+  });
+
+  recebidas.forEach((item, index) => {
+    const id = String(item?.id || '').trim();
+    if (!id || padroesPorId.has(id) || resultado.some((rotina) => rotina.id === id)) return;
+    const rotina = normalizarRotinaConfigurada(item, null, ROTINAS_PADRAO.length + index + 1);
+    if (rotina) resultado.push(rotina);
+  });
+
+  return resultado.sort((a, b) => (a.ordem - b.ordem) || a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 function limitarInteiro(valor, minimo = 0, maximo = Number.MAX_SAFE_INTEGER) {
@@ -912,11 +1111,24 @@ function horarioParaMinutos(horario) {
 
 function slugChecklist(texto) {
   return slug(String(texto || '')
-    .replace(/[º°ª]/g, '')
+    // O RelChecklist exporta ordinais como 01o, 09oPromotor e 2a feira.
+    // Mantém também a compatibilidade com º, ° e ª do modelo anterior.
+    .replace(/(\d{1,2})\s*[º°ª]/g, '$1')
+    .replace(/(\d{1,2})\s*[oOaA](?=\s|[A-Za-zÀ-ÿ]|[.\]&-])/g, '$1')
     .replace(/\bhoras?\b/gi, 'h')
     .replace(/\bhrs?\b/gi, 'h')
     .replace(/(\d{1,2})h(\d{2})\b/gi, '$1-$2')
     .replace(/(\d{1,2}):(\d{2})/g, '$1-$2'));
+}
+
+function separarCodigoNomeUnidade(valor = '') {
+  const texto = String(valor || '').trim().replace(/\s+/g, ' ');
+  const match = texto.match(/^(\d{1,3})\s*(?:[-–—|]\s*|\s+)(.+)$/);
+  if (!match) return { codigoUnidade: '', nomeUnidade: texto };
+  return {
+    codigoUnidade: normalizarCodigoUnidade(match[1]),
+    nomeUnidade: String(match[2] || '').trim()
+  };
 }
 
 function encontrarConfigRotinaPorNome(nome) {
@@ -939,11 +1151,30 @@ function dataIsoParaDate(dataIso) {
   return Number.isNaN(data.getTime()) ? null : data;
 }
 
-function rotinaAplicaNaData(rotina, dataIso) {
-  if (!rotina?.ativa) return false;
-  const data = dataIsoParaDate(dataIso);
+function rotinaEstaVigenteNaData(rotina, dataIso) {
+  if (!rotina) return false;
+  const data = normalizarDataIsoSimples(dataIso);
   if (!data) return false;
-  return Array.isArray(rotina.dias) && rotina.dias.includes(data.getDay());
+  const inicio = normalizarDataIsoSimples(rotina.vigenciaInicio);
+  const fim = normalizarDataIsoSimples(rotina.vigenciaFim);
+  if (inicio && data < inicio) return false;
+  if (fim && data > fim) return false;
+  if (rotina.ativa === false && !fim) return false;
+  return true;
+}
+
+function rotinaAplicaNaData(rotina, dataIso) {
+  if (!rotinaEstaVigenteNaData(rotina, dataIso)) return false;
+  const data = dataIsoParaDate(dataIso);
+  return Boolean(data && Array.isArray(rotina.dias) && rotina.dias.includes(data.getDay()));
+}
+
+function statusAdministrativoRotina(rotina, hoje = dataLocalIso()) {
+  const inicio = normalizarDataIsoSimples(rotina?.vigenciaInicio);
+  const fim = normalizarDataIsoSimples(rotina?.vigenciaFim);
+  if (rotina?.ativa === false || (fim && fim < hoje)) return { id: 'inativa', label: 'Inativa' };
+  if (inicio && inicio > hoje) return { id: 'agendada', label: 'Agendada' };
+  return { id: 'ativa', label: 'Ativa' };
 }
 
 function lojaEh12x36(loja, codigoUnidade = '') {
@@ -1209,6 +1440,8 @@ function enriquecerRegistro(base, index, mapaFormadores = new Map(), mapaPromoto
     loja: lojaInfo.loja,
     unidade: base.unidade || lojaInfo.unidade,
     formador: resolverFormador(lojaInfo.loja, base.formador, mapaFormadores),
+    regional: resolverRegional(lojaInfo.loja, base.codigoUnidade).id,
+    regionalNome: resolverRegional(lojaInfo.loja, base.codigoUnidade).nome,
     promotor: resolverPromotor(lojaInfo.loja, base.promotor, mapaPromotores),
     rotina: rotinaConfig?.nome || rotinaNome,
     rotinaId: rotinaConfig?.id || base.rotinaId || '',
@@ -1249,10 +1482,11 @@ function preencherSelect(select, valores, placeholder) {
 }
 
 function popularFiltros() {
-  preencherSelect(filtros.rede, [...new Set(registros.map((item) => item.rede))].sort(), 'Todas');
-  preencherSelect(filtros.loja, [...new Set(registros.map((item) => item.loja))].sort(), 'Todas');
-  preencherSelect(filtros.formador, [...new Set(registros.map((item) => item.formador).filter(ehFormadorAtivo))].sort(), 'Todos');
-  preencherSelect(filtros.rotina, [...new Set(registros.map((item) => item.rotina))].sort((a, b) => a.localeCompare(b, 'pt-BR')), 'Todas');
+  const baseRegional = registros.filter((item) => registroPertenceRegional(item));
+  preencherSelect(filtros.rede, [...new Set(baseRegional.map((item) => item.rede))].sort(), 'Todas');
+  preencherSelect(filtros.loja, [...new Set(baseRegional.map((item) => item.loja))].sort(), 'Todas');
+  preencherSelect(filtros.formador, [...new Set(baseRegional.map((item) => item.formador).filter(ehFormadorAtivo))].sort(), 'Todos');
+  preencherSelect(filtros.rotina, [...new Set(baseRegional.map((item) => item.rotina))].sort((a, b) => a.localeCompare(b, 'pt-BR')), 'Todas');
 }
 
 function sincronizarFiltrosDependentes() {
@@ -1262,7 +1496,8 @@ function sincronizarFiltrosDependentes() {
   const baseLojas = registros.filter((item) => {
     const matchRede = redeSelecionada ? item.rede === redeSelecionada : true;
     const matchFormador = formadorSelecionado ? item.formador === formadorSelecionado : true;
-    return matchRede && matchFormador;
+    const matchRegional = registroPertenceRegional(item);
+    return matchRede && matchFormador && matchRegional;
   });
 
   preencherSelect(filtros.loja, [...new Set(baseLojas.map((item) => item.loja))].sort(), 'Todas');
@@ -1294,7 +1529,8 @@ function obterDadosFiltrados() {
     const matchStatus = filtros.status.value ? item.status === filtros.status.value : true;
     const matchData = dataDentroDoPeriodo(item.data, dataInicial, dataFinal);
     const matchRotina = filtros.rotina.value ? item.rotina === filtros.rotina.value : true;
-    return matchRede && matchLoja && matchFormador && matchStatus && matchData && matchRotina;
+    const matchRegional = registroPertenceRegional(item);
+    return matchRede && matchLoja && matchFormador && matchStatus && matchData && matchRotina && matchRegional;
   });
 }
 
@@ -1316,8 +1552,8 @@ function atualizarKPIs(dados) {
   const executionRing = document.getElementById('executionRing');
   if (executionRing) executionRing.style.setProperty('--progress', String(Math.max(0, Math.min(execucao, 100))));
 
-  const totalAnterior = registros.filter((item) => dataDentroDoPeriodo(item.data, ...obterPeriodoComparativo().split('|'))).length;
-  const realizadasAnterior = registros.filter((item) => item.status === 'realizada' && dataDentroDoPeriodo(item.data, ...obterPeriodoComparativo().split('|'))).length;
+  const totalAnterior = registros.filter((item) => registroPertenceRegional(item) && dataDentroDoPeriodo(item.data, ...obterPeriodoComparativo().split('|'))).length;
+  const realizadasAnterior = registros.filter((item) => registroPertenceRegional(item) && item.status === 'realizada' && dataDentroDoPeriodo(item.data, ...obterPeriodoComparativo().split('|'))).length;
   const execucaoAnterior = percentual(realizadasAnterior, totalAnterior);
   const delta = execucao - execucaoAnterior;
   const deltaEl = document.getElementById('execucaoDelta');
@@ -1756,6 +1992,134 @@ function renderConsultaRotina(dados) {
     </div>`;
 }
 
+function diasEntreDatas(dataInicial, dataFinal) {
+  const inicio = new Date(`${dataInicial}T00:00:00`);
+  const fim = new Date(`${dataFinal}T00:00:00`);
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime())) return 0;
+  return Math.floor((fim - inicio) / 86400000) + 1;
+}
+
+function periodoContidoNosRecentes(dataInicial, dataFinal) {
+  const datas = snapshotsRecentes.map((item) => formatarData(item.latestDate)).filter(Boolean).sort();
+  if (!datas.length) return false;
+  return dataInicial >= datas[0] && dataFinal <= datas[datas.length - 1];
+}
+
+async function carregarDetalhesDoPeriodo(dataInicial, dataFinal) {
+  if (!firebaseDisponivel || !firebaseApi || !snapshotsCollectionRef) return true;
+  if (!dataInicial && !dataFinal) return true;
+
+  const inicio = dataInicial || dataFinal;
+  const fim = dataFinal || dataInicial;
+  if (!inicio || !fim) return true;
+
+  const periodo = normalizarPeriodo(inicio, fim);
+  const dias = diasEntreDatas(periodo.dataInicial, periodo.dataFinal);
+  if (dias > LIMITE_DIAS_CONSULTA_DETALHADA) {
+    setImportStatus(
+      `Para preservar o desempenho, relatórios detalhados aceitam até ${LIMITE_DIAS_CONSULTA_DETALHADA} dias por consulta. Reduza o período; os resumos históricos continuam preservados.`,
+      'Período muito amplo'
+    );
+    return false;
+  }
+
+  if (periodoContidoNosRecentes(periodo.dataInicial, periodo.dataFinal)) {
+    snapshotsSobDemanda = [];
+    periodoSobDemandaAtual = { dataInicial: '', dataFinal: '' };
+    recomporSnapshotsAtivos();
+    return true;
+  }
+
+  if (
+    periodoSobDemandaAtual.dataInicial === periodo.dataInicial
+    && periodoSobDemandaAtual.dataFinal === periodo.dataFinal
+  ) return true;
+
+  if (carregamentoPeriodoPromise) return carregamentoPeriodoPromise;
+
+  carregamentoPeriodoPromise = (async () => {
+    try {
+      setImportStatus(
+        `Carregando detalhes de ${periodo.dataInicial.split('-').reverse().join('/')} até ${periodo.dataFinal.split('-').reverse().join('/')}...`,
+        'Carregando período'
+      );
+      const consulta = firebaseApi.query(
+        snapshotsCollectionRef,
+        firebaseApi.where('latestDate', '>=', periodo.dataInicial),
+        firebaseApi.where('latestDate', '<=', periodo.dataFinal),
+        firebaseApi.orderBy('latestDate', 'desc'),
+        firebaseApi.limit(LIMITE_DIAS_CONSULTA_DETALHADA)
+      );
+      const resultado = await firebaseApi.getDocs(consulta);
+      const metas = resultado.docs.map((item) => normalizarSnapshotFirebase({ id: item.id, ...item.data() }));
+      snapshotsSobDemanda = await carregarSnapshotsEmLotes(metas);
+      periodoSobDemandaAtual = { ...periodo };
+      recomporSnapshotsAtivos();
+      atualizarBasePorSnapshots(`${snapshotsSobDemanda.length} dia(s) detalhado(s) carregado(s) sob demanda.`);
+      setImportStatus('Período detalhado carregado. O restante do histórico permaneceu em modo resumido.', 'Período carregado');
+      return true;
+    } catch (error) {
+      console.error('Erro ao carregar período detalhado:', error);
+      setImportStatus('Não foi possível carregar os detalhes desse período agora.', 'Falha no período');
+      return false;
+    } finally {
+      carregamentoPeriodoPromise = null;
+    }
+  })();
+
+  return carregamentoPeriodoPromise;
+}
+
+async function prepararFiltrosComDetalhes() {
+  const periodo = normalizarPeriodo(filtros.dataInicial.value, filtros.dataFinal.value);
+  return carregarDetalhesDoPeriodo(periodo.dataInicial, periodo.dataFinal);
+}
+
+
+function atualizarAbasRegionaisDashboard() {
+  const contagens = LOJAS_ATIVAS.reduce((acc, loja) => {
+    const id = resolverRegional(loja.nome, loja.codigo).id;
+    acc[id] = (acc[id] || 0) + 1;
+    return acc;
+  }, {});
+  const df = document.getElementById('regionalCountDfGo');
+  const go = document.getElementById('regionalCountGoiania');
+  if (df) df.textContent = `${contagens.df_go || 0} unidades`;
+  if (go) go.textContent = `${contagens.goiania_fora || 0} unidades`;
+  document.querySelectorAll('.regional-tab').forEach((button) => {
+    button.classList.toggle('active', button.dataset.regional === regionalSelecionada);
+  });
+  const semRegional = contagens.sem_regional || 0;
+  const aviso = document.getElementById('regionalDashboardNotice');
+  if (aviso) {
+    const mensagens = [];
+    if (!regionalMapRevisado) mensagens.push('A divisão inicial das regionais ainda precisa ser confirmada no ADM.');
+    if (semRegional) mensagens.push(`${semRegional} unidade(s) ainda sem regional definida.`);
+    aviso.classList.toggle('hidden', !mensagens.length);
+    aviso.textContent = mensagens.join(' ');
+  }
+}
+
+function selecionarRegionalDashboard(regionalId = 'geral') {
+  regionalSelecionada = regionalId === 'geral' || REGIONAIS_POR_ID.has(regionalId) ? regionalId : 'geral';
+  atualizarAbasRegionaisDashboard();
+  popularFiltros();
+  sincronizarFiltrosDependentes();
+  renderizarPainel();
+}
+
+function configurarAbasRegionaisDashboard() {
+  const container = document.getElementById('regionalDashboardTabs');
+  if (!container || container.dataset.configured === '1') return;
+  container.dataset.configured = '1';
+  container.addEventListener('click', (event) => {
+    const button = event.target.closest('.regional-tab[data-regional]');
+    if (!button) return;
+    selecionarRegionalDashboard(button.dataset.regional);
+  });
+  atualizarAbasRegionaisDashboard();
+}
+
 function renderizarPainel() {
   dadosFiltrados = obterDadosFiltrados();
   atualizarKPIs(dadosFiltrados);
@@ -1779,6 +2143,10 @@ function limparFiltros() {
   filtros.dataInicial.value = '';
   filtros.dataFinal.value = '';
   filtros.rotina.value = '';
+  snapshotsSobDemanda = [];
+  periodoSobDemandaAtual = { dataInicial: '', dataFinal: '' };
+  recomporSnapshotsAtivos();
+  atualizarBasePorSnapshots('Exibindo novamente os detalhes recentes.');
   sincronizarFiltrosDependentes();
   renderizarPainel();
 }
@@ -1818,6 +2186,7 @@ function aplicarBase(base, origem = 'simulada', detalhe = '') {
     renderizarPainel();
   }
   atualizarResumoAdmin();
+  atualizarAbasRegionaisDashboard();
   const adminModal = document.getElementById('adminModal');
   const adminPanel = document.getElementById('adminPanelView');
   if (adminModal && !adminModal.classList.contains('hidden') && adminPanel && !adminPanel.classList.contains('hidden')) {
@@ -1893,7 +2262,10 @@ function localizarCabecalhoMoki(linhas = []) {
     const cabecalho = (linhas[index] || []).map((item) => slug(item));
     const temChecklist = cabecalho.includes('checklist');
     const temLoja = cabecalho.includes('nome-da-unidade') || cabecalho.includes('unidade');
-    const temData = cabecalho.includes('data-de-referencia') || cabecalho.includes('data-de-inicio');
+    const temData = cabecalho.includes('data-de-referencia')
+      || cabecalho.includes('data-de-inicio')
+      || cabecalho.includes('data-avaliacao')
+      || cabecalho.includes('data-da-resposta');
     if (temChecklist && temLoja && temData) {
       return { index, cabecalho };
     }
@@ -1914,7 +2286,7 @@ function extrairRespostasMoki(sheets) {
 
   const cabecalhoInfo = localizarCabecalhoMoki(linhas);
   if (!cabecalhoInfo) {
-    throw new Error('Não foi possível localizar as colunas do relatório “Checklists Respondidos” do Moki.');
+    throw new Error('Não foi possível localizar as colunas do relatório de checklist do Moki.');
   }
 
   const { index: linhaCabecalho, cabecalho } = cabecalhoInfo;
@@ -1922,22 +2294,28 @@ function extrairRespostasMoki(sheets) {
   const idxChecklist = encontrarIndiceCabecalho(cabecalho, ['checklist']);
   const idxDataReferencia = encontrarIndiceCabecalho(cabecalho, ['data-de-referencia']);
   const idxDataInicio = encontrarIndiceCabecalho(cabecalho, ['data-de-inicio']);
+  const idxDataAvaliacao = encontrarIndiceCabecalho(cabecalho, ['data-avaliacao']);
+  const idxDataResposta = encontrarIndiceCabecalho(cabecalho, ['data-da-resposta']);
   const idxNomeUnidade = encontrarIndiceCabecalho(cabecalho, ['nome-da-unidade']);
   const idxUnidade = encontrarIndiceCabecalho(cabecalho, ['unidade']);
   const idxCodigoUnidade = encontrarIndiceCabecalho(cabecalho, ['cod-da-unidade', 'codigo-da-unidade']);
   const idxAutor = encontrarIndiceCabecalho(cabecalho, ['autor']);
   const idxStatus = encontrarIndiceCabecalho(cabecalho, ['status']);
+  const idxDataRealizacao = idxDataResposta >= 0
+    ? idxDataResposta
+    : (idxDataInicio >= 0 ? idxDataInicio : idxDataAvaliacao);
 
-  if ([idxChecklist, idxDataInicio].some((idx) => idx < 0) || (idxNomeUnidade < 0 && idxUnidade < 0)) {
-    throw new Error('A planilha precisa conter CHECKLIST, DATA DE INÍCIO e NOME DA UNIDADE.');
+  if (idxChecklist < 0 || idxDataRealizacao < 0 || (idxNomeUnidade < 0 && idxUnidade < 0)) {
+    throw new Error('A planilha precisa conter CHECKLIST, UNIDADE e uma coluna de data/hora: DATA DA RESPOSTA, DATA DE INÍCIO ou DATA AVALIAÇÃO.');
   }
 
-  const respostas = [];
+  let respostas = [];
   const naoReconhecidos = [];
   const linhasInvalidas = [];
   const naoEncerrados = [];
   const datasDivergentes = [];
   const lojasNaoAtivas = [];
+  const datasForaPeriodo = [];
   const rawData = [];
 
   linhas.slice(linhaCabecalho + 1).forEach((linha, index) => {
@@ -1945,18 +2323,22 @@ function extrairRespostasMoki(sheets) {
 
     const numeroLinha = linhaCabecalho + index + 2;
     const checklistOriginal = String(linha[idxChecklist] || '').trim();
-    const lojaOriginal = String(
+    const unidadeOriginal = String(
       (idxNomeUnidade >= 0 ? linha[idxNomeUnidade] : '')
       || (idxUnidade >= 0 ? linha[idxUnidade] : '')
       || ''
     ).trim();
+    const unidadeSeparada = separarCodigoNomeUnidade(unidadeOriginal);
+    const lojaOriginal = unidadeSeparada.nomeUnidade;
     const dataReferenciaOriginal = idxDataReferencia >= 0 ? linha[idxDataReferencia] : '';
-    const dataInicioOriginal = linha[idxDataInicio];
+    const dataRealizacaoOriginal = linha[idxDataRealizacao];
     const autor = idxAutor >= 0 ? String(linha[idxAutor] || '').trim() : '';
-    const codigoUnidade = normalizarCodigoUnidade(idxCodigoUnidade >= 0 ? linha[idxCodigoUnidade] : '');
+    const codigoUnidade = normalizarCodigoUnidade(
+      (idxCodigoUnidade >= 0 ? linha[idxCodigoUnidade] : '') || unidadeSeparada.codigoUnidade
+    );
     const idMoki = idxId >= 0 ? String(linha[idxId] || '').trim() : '';
     const statusMoki = idxStatus >= 0 ? String(linha[idxStatus] || '').trim() : 'Encerrado';
-    const dataHora = parseDataHoraMoki(dataInicioOriginal, dataReferenciaOriginal);
+    const dataHora = parseDataHoraMoki(dataRealizacaoOriginal, dataReferenciaOriginal);
     const dataReferencia = formatarData(dataReferenciaOriginal) || dataHora.data;
     const lojaAtiva = resolverLojaAtiva(lojaOriginal, codigoUnidade);
     const loja = lojaAtiva?.nome || renomearLojaSeNecessario(lojaOriginal);
@@ -1970,6 +2352,7 @@ function extrairRespostasMoki(sheets) {
       checklist: checklistOriginal,
       loja,
       lojaOriginal,
+      unidadeOriginal,
       codigoUnidade,
       statusMoki,
       dataHoraRealizada: dataHora.dataHoraIso,
@@ -2022,6 +2405,29 @@ function extrairRespostasMoki(sheets) {
     throw new Error('Nenhuma resposta encerrada e válida corresponde às lojas e rotinas cadastradas no sistema.');
   }
 
+  // O relatório com "Data da resposta" pode carregar uma resposta antiga isolada.
+  // Quando uma única data concentra pelo menos 90% das rotinas únicas, ela é tratada
+  // como o período principal; datas residuais são ignoradas para não gerar um dia inteiro
+  // de pendências por causa de uma linha antiga.
+  if (idxDataResposta >= 0 && idxDataReferencia < 0) {
+    const unicas = mesclarRespostas(respostas);
+    const contagemDatas = unicas.reduce((acc, item) => {
+      acc[item.data] = (acc[item.data] || 0) + 1;
+      return acc;
+    }, {});
+    const entradasDatas = Object.entries(contagemDatas).sort((a, b) => b[1] - a[1]);
+    const totalUnicas = unicas.length;
+    const principal = entradasDatas[0];
+    if (entradasDatas.length > 1 && principal && totalUnicas > 0 && principal[1] / totalUnicas >= 0.90) {
+      const dataPrincipal = principal[0];
+      respostas = respostas.filter((item) => {
+        if (item.data === dataPrincipal) return true;
+        datasForaPeriodo.push(item);
+        return false;
+      });
+    }
+  }
+
   return {
     nomeAba,
     linhaCabecalho,
@@ -2031,6 +2437,7 @@ function extrairRespostasMoki(sheets) {
     naoEncerrados,
     datasDivergentes,
     lojasNaoAtivas,
+    datasForaPeriodo,
     rawData
   };
 }
@@ -2039,13 +2446,17 @@ function chaveResposta(data, loja, rotinaId) {
   return `${data}||${slug(renomearLojaSeNecessario(loja))}||${rotinaId}`;
 }
 
-function escolherRespostaMaisAntiga(atual, candidata) {
+function escolherRespostaConclusao(atual, candidata) {
   if (!atual) return candidata;
+  const atualIso = String(atual.dataHoraRealizada || '');
+  const candidataIso = String(candidata.dataHoraRealizada || '');
+  if (atualIso && candidataIso) return candidataIso > atualIso ? candidata : atual;
+
   const atualMin = horarioParaMinutos(atual.horaRealizada);
   const candidataMin = horarioParaMinutos(candidata.horaRealizada);
   if (atualMin === null) return candidata;
   if (candidataMin === null) return atual;
-  return candidataMin < atualMin ? candidata : atual;
+  return candidataMin > atualMin ? candidata : atual;
 }
 
 function mesclarRespostas(respostas = []) {
@@ -2053,7 +2464,7 @@ function mesclarRespostas(respostas = []) {
   respostas.forEach((resposta) => {
     if (!resposta?.data || !resposta?.loja || !resposta?.rotinaId) return;
     const chave = chaveResposta(resposta.data, resposta.loja, resposta.rotinaId);
-    mapa.set(chave, escolherRespostaMaisAntiga(mapa.get(chave), resposta));
+    mapa.set(chave, escolherRespostaConclusao(mapa.get(chave), resposta));
   });
   return [...mapa.values()];
 }
@@ -2099,7 +2510,7 @@ function obterRespostasPersistidas() {
       const resposta = normalizarRespostaPersistida(item);
       if (!resposta) return;
       const chave = chaveResposta(resposta.data, resposta.loja, resposta.rotinaId);
-      mapa.set(chave, escolherRespostaMaisAntiga(mapa.get(chave), resposta));
+      mapa.set(chave, escolherRespostaConclusao(mapa.get(chave), resposta));
     });
   });
 
@@ -2144,6 +2555,8 @@ function gerarResultadosBaseParaData(data, respostasInformadas = []) {
         loja: lojaInfo.loja,
         codigoUnidade: lojaAtiva?.codigo || '',
         unidade: lojaInfo.unidade,
+        regional: resolverRegional(lojaNormalizada, lojaAtiva?.codigo).id,
+        regionalNome: resolverRegional(lojaNormalizada, lojaAtiva?.codigo).nome,
         formador: resolverFormador(lojaInfo.loja),
         promotor: resposta?.promotor || resposta?.autor || resolverPromotor(lojaInfo.loja),
         autor: resposta?.autor || '',
@@ -2191,17 +2604,23 @@ function compactarRespostaParaPersistencia(resposta = {}) {
 }
 
 function resumirResultadosImportacao(resultados = []) {
-  return {
-    previstas: resultados.length,
-    realizadas: resultados.filter((item) => item.status === 'realizada').length,
-    pendentes: resultados.filter((item) => item.status === 'pendente').length,
-    noPrazo: resultados.filter((item) => item.pontualidade === 'no_prazo').length,
-    toleranciaInicio: resultados.filter((item) => item.pontualidade === 'tolerancia_inicio').length,
-    toleranciaFim: resultados.filter((item) => item.pontualidade === 'tolerancia_fim').length,
-    atrasadas: resultados.filter((item) => item.pontualidade === 'atrasada').length,
-    antesHorario: resultados.filter((item) => item.pontualidade === 'antes_horario').length,
-    semHorario: resultados.filter((item) => item.pontualidade === 'sem_regra').length
-  };
+  const resumirGrupo = (lista) => ({
+    previstas: lista.length,
+    realizadas: lista.filter((item) => item.status === 'realizada').length,
+    pendentes: lista.filter((item) => item.status === 'pendente').length,
+    noPrazo: lista.filter((item) => item.pontualidade === 'no_prazo').length,
+    toleranciaInicio: lista.filter((item) => item.pontualidade === 'tolerancia_inicio').length,
+    toleranciaFim: lista.filter((item) => item.pontualidade === 'tolerancia_fim').length,
+    atrasadas: lista.filter((item) => item.pontualidade === 'atrasada').length,
+    antesHorario: lista.filter((item) => item.pontualidade === 'antes_horario').length,
+    semHorario: lista.filter((item) => item.pontualidade === 'sem_regra').length
+  });
+  const geral = resumirGrupo(resultados);
+  geral.regionais = REGIONAIS.reduce((acc, regional) => {
+    acc[regional.id] = resumirGrupo(resultados.filter((item) => registroPertenceRegional(item, regional.id)));
+    return acc;
+  }, {});
+  return geral;
 }
 
 function processarPlanilhaMoki(sheets) {
@@ -2211,11 +2630,13 @@ function processarPlanilhaMoki(sheets) {
     throw new Error('Nenhuma resposta corresponde às rotinas cadastradas no sistema.');
   }
 
+  const respostasUnicas = mesclarRespostas(extracao.respostas);
+  const duplicadasRemovidas = Math.max(0, extracao.respostas.length - respostasUnicas.length);
   const resultados = [];
   const foraDaProgramacao = [];
 
   datas.forEach((data) => {
-    const gerado = gerarResultadosParaData(data, extracao.respostas);
+    const gerado = gerarResultadosBaseParaData(data, extracao.respostas);
     resultados.push(...gerado.resultados);
     foraDaProgramacao.push(...gerado.foraDaProgramacao);
   });
@@ -2223,6 +2644,8 @@ function processarPlanilhaMoki(sheets) {
   return {
     ...extracao,
     datas,
+    respostasUnicas,
+    duplicadasRemovidas,
     resultados,
     foraDaProgramacao,
     resumo: resumirResultadosImportacao(resultados)
@@ -2436,13 +2859,15 @@ function renderizarPreviewImportacao() {
     if (item.processamento.naoEncerrados.length) avisos.push(`${item.processamento.naoEncerrados.length} resposta(s) em aberto ignorada(s)`);
     if (item.processamento.datasDivergentes.length) avisos.push(`${item.processamento.datasDivergentes.length} resposta(s) com data de início divergente`);
     if (item.processamento.lojasNaoAtivas.length) avisos.push(`${item.processamento.lojasNaoAtivas.length} resposta(s) de loja não ativa`);
+    if (item.processamento.datasForaPeriodo?.length) avisos.push(`${item.processamento.datasForaPeriodo.length} resposta(s) encerrada(s) de data isolada ignorada(s)`);
+    if (item.processamento.duplicadasRemovidas) avisos.push(`${item.processamento.duplicadasRemovidas} linha(s) repetida(s) consolidadas pelo último horário`);
     if (item.processamento.foraDaProgramacao.length) avisos.push(`${item.processamento.foraDaProgramacao.length} resposta(s) fora da programação`);
 
     return `<div class="preview-card">
       <div class="preview-card-head">
         <div>
           <strong>${escaparHtml(item.fileName)}</strong>
-          <div class="preview-meta">${item.processamento.respostas.length} resposta(s) reconhecida(s) • ${item.processamento.datas.length} data(s) • aba ${escaparHtml(item.sheetName || 'principal')}</div>
+          <div class="preview-meta">${item.processamento.respostas.length} linha(s) encerrada(s) reconhecida(s) • ${item.processamento.respostasUnicas?.length || 0} rotina(s) única(s) • ${item.processamento.datas.length} data(s) • aba ${escaparHtml(item.sheetName || 'principal')}</div>
         </div>
         <span class="status-tag">Pronta</span>
       </div>
@@ -2469,7 +2894,7 @@ async function montarPreviewArquivos() {
   renderizarPreviewImportacao();
 
   if (!arquivos.length) {
-    setImportStatus('Selecione uma ou mais planilhas do relatório “Checklists Respondidos” do Moki.', 'Sem arquivo');
+    setImportStatus('Selecione uma ou mais planilhas de checklist do Moki.', 'Sem arquivo');
     return;
   }
 
@@ -2513,7 +2938,7 @@ async function montarPreviewArquivos() {
       'Prévia pronta'
     );
   } else {
-    setImportStatus('Nenhuma das planilhas selecionadas pôde ser lida como relatório do Moki.', 'Falha na prévia');
+    setImportStatus('Nenhuma das planilhas selecionadas pôde ser lida como relatório de checklist do Moki.', 'Falha na prévia');
   }
 }
 
@@ -2525,14 +2950,25 @@ function dataExpiracaoDadosBrutos(importedAt = new Date()) {
 }
 
 function substituirSnapshotLocal(snapshot) {
-  const indice = snapshotsImportados.findIndex((item) => item.id === snapshot.id);
-  if (indice >= 0) {
-    snapshotsImportados.splice(indice, 1, snapshot);
-  } else {
-    snapshotsImportados.push(snapshot);
+  const atualizarLista = (lista) => {
+    const indice = lista.findIndex((item) => item.id === snapshot.id);
+    if (indice >= 0) lista.splice(indice, 1, snapshot);
+    else lista.push(snapshot);
+    lista.sort((a, b) => String(b.latestDate || '').localeCompare(String(a.latestDate || '')));
+  };
+
+  atualizarLista(snapshotsRecentes);
+  snapshotsRecentes = snapshotsRecentes.slice(0, LIMITE_DIAS_DETALHES_INICIAIS);
+  snapshotsSobDemanda = snapshotsSobDemanda.filter((item) => item.id !== snapshot.id);
+
+  const resumo = normalizarResumoDiario(snapshot);
+  if (resumo) {
+    resumosDiarios = [resumo, ...resumosDiarios.filter((item) => item.id !== resumo.id)]
+      .sort((a, b) => b.latestDate.localeCompare(a.latestDate))
+      .slice(0, LIMITE_RESUMOS_HISTORICOS);
   }
-  snapshotsImportados.sort((a, b) => new Date(b.importedAt) - new Date(a.importedAt));
-  invalidarCacheDados();
+
+  recomporSnapshotsAtivos();
 }
 
 async function importarArquivo() {
@@ -2579,7 +3015,7 @@ async function importarArquivo() {
 
   for (const data of datas) {
     const respostasData = respostasNovas.filter((item) => item.data === data);
-    const gerado = gerarResultadosParaData(data, respostasData);
+    const gerado = gerarResultadosBaseParaData(data, respostasData);
     const resultados = normalizarBaseCompleta(gerado.resultados, 'importada');
     const summary = resumirResultadosImportacao(resultados);
     const agora = new Date();
@@ -2621,6 +3057,12 @@ async function importarArquivo() {
     totalPendentes += summary.pendentes;
   }
 
+  const usoRotinasAtualizado = registrarUsoRotinas(respostasNovas);
+  if (usoRotinasAtualizado) {
+    salvarStore(STORAGE_KEYS.routineConfig, configRotinas);
+    await salvarConfigNoFirebase();
+  }
+
   persistirSnapshotsLocais();
   atualizarBasePorSnapshots(
     `${totalPrevistas} rotinas previstas • ${totalRealizadas} realizadas • ${totalAtrasadas} em atraso • ${totalPendentes} pendentes.`
@@ -2650,6 +3092,10 @@ async function resetarParaSimulada() {
   const idsAnteriores = snapshotsImportados.map((snapshot) => snapshot.id).filter(Boolean);
   const totalAnterior = snapshotsImportados.length;
   snapshotsImportados = [];
+  snapshotsRecentes = [];
+  snapshotsSobDemanda = [];
+  resumosDiarios = [];
+  periodoSobDemandaAtual = { dataInicial: '', dataFinal: '' };
   invalidarCacheDados();
   persistirSnapshotsLocais();
   if (fileInput) fileInput.value = '';
@@ -2657,7 +3103,7 @@ async function resetarParaSimulada() {
   renderizarPreviewImportacao();
   atualizarBasePorSnapshots('Painel limpo com sucesso.');
 
-  const remotoLimpo = await limparSnapshotsNoFirebase(idsAnteriores);
+  const remotoLimpo = await limparSnapshotsNoFirebase();
   setImportStatus(
     remotoLimpo
       ? 'Painel limpo com sucesso. A atualização foi enviada para todos os usuários.'
@@ -2676,88 +3122,405 @@ function aplicarRegrasAdministrativasNaBaseAtual() {
   aplicarBase(registrosBase, temSnapshots ? 'importada' : 'simulada', importSummary?.textContent || 'Base atualizada.');
 }
 
+function obterContagemRegionais() {
+  return LOJAS_ATIVAS.reduce((acc, loja) => {
+    const regionalId = resolverRegional(loja.nome, loja.codigo).id;
+    acc[regionalId] = (acc[regionalId] || 0) + 1;
+    return acc;
+  }, {});
+}
+
 function atualizarResumoAdmin() {
   const adminSummary = document.getElementById('adminSummary');
-  const lojas = new Set(registros.map((item) => item.loja)).size;
-  const formadores = new Set(registros.map((item) => item.formador)).size;
-  const origem = snapshotsImportados.length ? `${snapshotsImportados.length} planilha(s) importada(s)` : 'painel zerado';
-  if (adminSummary) adminSummary.textContent = `${formatarNumero.format(registros.length)} registros ativos • ${lojas} lojas • ${formadores} formadores • origem: ${origem}.`;
-}
+  const totalDiasHistorico = obterHistoricoLeve().length;
+  const contagens = obterContagemRegionais();
+  const semRegional = contagens.sem_regional || 0;
+  const ultimo = obterHistoricoLeve()[0];
+  const ultimaImportacao = ultimo?.latestDate ? ultimo.latestDate.split('-').reverse().join('/') : 'Nenhuma';
 
-function popularRotinasConfigAdmin() {
-  const select = document.getElementById('routineConfigSelect');
-  if (!select) return;
-  const atual = select.value || configRotinas[0]?.id || '';
-  select.innerHTML = configRotinas.map((rotina) => `<option value="${escaparHtml(rotina.id)}">${escaparHtml(rotina.nome)}</option>`).join('');
-  select.value = configRotinas.some((item) => item.id === atual) ? atual : (configRotinas[0]?.id || '');
-  preencherRegraRotinaSelecionada();
-}
+  if (adminSummary) adminSummary.textContent = `${LOJAS_ATIVAS.length} unidades ativas • ${configRotinas.filter((item) => statusAdministrativoRotina(item).id !== 'inativa').length} rotinas • ${totalDiasHistorico} dia(s) no histórico.`;
 
-function preencherRegraRotinaSelecionada() {
-  const select = document.getElementById('routineConfigSelect');
-  if (!select) return;
-  const rotina = obterConfigRotinaPorId(select.value) || configRotinas[0];
-  if (!rotina) return;
+  const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  setText('adminKpiUnidades', formatarNumero.format(LOJAS_ATIVAS.length));
+  setText('adminKpiSemRegional', formatarNumero.format(semRegional));
+  setText('adminKpiRotinas', formatarNumero.format(configRotinas.filter((item) => statusAdministrativoRotina(item).id !== 'inativa').length));
+  setText('adminKpi12x36', formatarNumero.format(CODIGOS_LOJAS_12X36.size));
+  setText('adminKpiUltimaImportacao', ultimaImportacao);
+  setText('adminKpiFirebase', firebaseDisponivel ? 'Online' : 'Modo local');
+  setText('adminKpiDiasHistorico', formatarNumero.format(totalDiasHistorico));
+  setText('adminKpiDetalhes', formatarNumero.format(snapshotsImportados.length));
 
-  const start = document.getElementById('routineStartTime');
-  const end = document.getElementById('routineEndTime');
-  const startTol = document.getElementById('routineStartTolerance');
-  const endTol = document.getElementById('routineEndTolerance');
-  const meta = document.getElementById('routineConfigMeta');
+  const sync = document.getElementById('adminSyncStatus');
+  if (sync) {
+    sync.textContent = firebaseDisponivel ? '● Firebase online' : '● Modo local';
+    sync.classList.toggle('offline', !firebaseDisponivel);
+  }
 
-  if (start) start.value = rotina.horarioInicio || '';
-  if (end) end.value = rotina.horarioFim || '';
-  if (startTol) startTol.value = rotina.toleranciaInicioMin ?? 0;
-  if (endTol) endTol.value = rotina.toleranciaFimMin ?? 0;
-  if (meta) {
-    meta.textContent = `${formatarDiasRotina(rotina.dias)} • ${formatarEscopoRotina(rotina.escopo)} • Checklist Moki: ${rotina.nomeMoki}`;
+  const alerts = document.getElementById('adminAlerts');
+  if (alerts) {
+    const itens = [];
+    if (!regionalMapRevisado) itens.push({ tipo: 'warn', titulo: 'Divisão regional aguardando confirmação', texto: 'A classificação inicial foi criada a partir da estrutura operacional atual. Revise e salve a seção Regionais.' });
+    if (semRegional) itens.push({ tipo: 'warn', titulo: `${semRegional} unidade(s) sem regional`, texto: 'Classifique as unidades na seção Regionais para evitar resultados fora das abas.' });
+    const semHorario = configRotinas.filter((rotina) => !rotina.horarioInicio && !rotina.horarioFim).length;
+    if (semHorario) itens.push({ tipo: 'info', titulo: `${semHorario} rotina(s) sem limite de horário`, texto: 'Essas rotinas contam como realizadas, mas não recebem classificação de atraso.' });
+    const expirando = snapshotsImportados.filter((snapshot) => snapshot.rawAvailable !== false && snapshot.rawExpiresAt && new Date(snapshot.rawExpiresAt).getTime() - Date.now() < 86400000 && new Date(snapshot.rawExpiresAt).getTime() > Date.now()).length;
+    if (expirando) itens.push({ tipo: 'info', titulo: `${expirando} arquivo(s) bruto(s) expiram em até 24h`, texto: 'Os resultados processados continuarão preservados.' });
+    if (!itens.length) itens.push({ tipo: 'ok', titulo: 'Nenhuma pendência crítica', texto: 'As configurações principais estão completas.' });
+    alerts.innerHTML = itens.map((item) => `<div class="admin-alert-item ${item.tipo}"><span>${item.tipo === 'ok' ? '✓' : item.tipo === 'warn' ? '!' : 'i'}</span><div><strong>${escaparHtml(item.titulo)}</strong><small>${escaparHtml(item.texto)}</small></div></div>`).join('');
+  }
+
+  const overview = document.getElementById('adminRegionalOverviewCards');
+  if (overview) {
+    overview.innerHTML = REGIONAIS.map((regional) => {
+      const quantidade = contagens[regional.id] || 0;
+      const pct = Math.round((quantidade / Math.max(1, LOJAS_ATIVAS.length)) * 100);
+      return `<div class="admin-regional-card"><div><span>${escaparHtml(regional.nome)}</span><strong>${quantidade} unidades</strong></div><div class="admin-regional-progress"><i style="width:${pct}%"></i></div><small>${pct}% do cadastro ativo</small></div>`;
+    }).join('');
   }
 }
 
-async function salvarRegraRotina() {
-  const select = document.getElementById('routineConfigSelect');
-  const feedback = document.getElementById('routineConfigFeedback');
-  const rotina = obterConfigRotinaPorId(select?.value);
-  if (!rotina) {
-    if (feedback) feedback.textContent = 'Selecione uma rotina válida.';
+function dataLocalIso(data = new Date()) {
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
+}
+
+function gerarIdRotina(nome = 'rotina') {
+  const base = slug(nome).replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 42) || 'nova';
+  let id = `rotina-${base}-${Date.now().toString(36)}`;
+  let contador = 2;
+  while (configRotinas.some((item) => item.id === id)) id = `rotina-${base}-${Date.now().toString(36)}-${contador++}`;
+  return id;
+}
+
+function rotinaPossuiHistorico(rotinaId) {
+  const rotina = obterConfigRotinaPorId(rotinaId);
+  if (rotina?.firstUsedAt) return true;
+  return snapshotsImportados.some((snapshot) => Array.isArray(snapshot.data) && snapshot.data.some((item) => item?.rotinaId === rotinaId));
+}
+
+function formatarVigenciaRotina(rotina) {
+  const inicio = rotina.vigenciaInicio ? rotina.vigenciaInicio.split('-').reverse().join('/') : 'Desde o início';
+  const fim = rotina.vigenciaFim ? rotina.vigenciaFim.split('-').reverse().join('/') : 'sem data final';
+  return `${inicio} • ${fim}`;
+}
+
+function renderTabelaRotinasAdmin() {
+  const tbody = document.getElementById('adminRoutinesTable');
+  if (!tbody) return;
+  const busca = slugChecklist(document.getElementById('adminRoutineSearch')?.value || '');
+  const filtro = document.getElementById('adminRoutineStatusFilter')?.value || '';
+  const hoje = dataLocalIso();
+  const rotinas = configRotinas.filter((rotina) => {
+    const status = statusAdministrativoRotina(rotina, hoje).id;
+    const texto = slugChecklist([rotina.id, rotina.nome, rotina.nomeMoki, ...(rotina.aliases || [])].join(' '));
+    return (!busca || texto.includes(busca)) && (!filtro || status === filtro);
+  });
+
+  if (!rotinas.length) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">Nenhuma rotina corresponde aos filtros.</div></td></tr>';
     return;
   }
 
+  tbody.innerHTML = rotinas.map((rotina) => {
+    const status = statusAdministrativoRotina(rotina, hoje);
+    const historico = rotinaPossuiHistorico(rotina.id);
+    const podeExcluir = rotina.origem !== 'padrao' && !historico;
+    return `<tr>
+      <td><div class="routine-name-cell"><strong>${escaparHtml(rotina.nome)}</strong><small>${escaparHtml(rotina.nomeMoki)}</small><code>${escaparHtml(rotina.id)}</code></div></td>
+      <td>${escaparHtml(formatarDiasRotina(rotina.dias))}</td>
+      <td>${escaparHtml(formatarEscopoRotina(rotina.escopo))}</td>
+      <td><span class="routine-vigencia">${escaparHtml(formatarVigenciaRotina(rotina))}</span></td>
+      <td><span class="status-tag ${status.id === 'ativa' ? 'success' : status.id === 'agendada' ? '' : 'muted'}">${escaparHtml(status.label)}</span></td>
+      <td><div class="routine-row-actions">
+        <button class="btn btn-secondary btn-compact" type="button" data-routine-action="edit" data-id="${escaparHtml(rotina.id)}">Editar</button>
+        <button class="btn btn-secondary btn-compact" type="button" data-routine-action="duplicate" data-id="${escaparHtml(rotina.id)}">Duplicar</button>
+        ${status.id !== 'inativa' ? `<button class="btn btn-secondary btn-compact" type="button" data-routine-action="deactivate" data-id="${escaparHtml(rotina.id)}">Desativar</button>` : ''}
+        ${podeExcluir ? `<button class="btn btn-danger btn-compact" type="button" data-routine-action="delete" data-id="${escaparHtml(rotina.id)}">Excluir</button>` : ''}
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function definirDiasEditor(dias = []) {
+  const ativos = new Set((Array.isArray(dias) ? dias : []).map(Number));
+  document.querySelectorAll('input[name="routineDays"]').forEach((input) => { input.checked = ativos.has(Number(input.value)); });
+}
+
+function obterDiasEditor() {
+  return [...document.querySelectorAll('input[name="routineDays"]:checked')]
+    .map((input) => Number(input.value))
+    .filter((dia) => Number.isInteger(dia) && dia >= 0 && dia <= 6)
+    .sort((a, b) => a - b);
+}
+
+function abrirEditorRotina(rotinaId = '', duplicar = false) {
+  const editor = document.getElementById('routineEditor');
+  if (!editor) return;
+  const origem = rotinaId ? obterConfigRotinaPorId(rotinaId) : null;
+  const editando = Boolean(origem && !duplicar);
+  const hoje = dataLocalIso();
+  const rotina = origem ? { ...origem } : {
+    nome: '', nomeMoki: '', aliases: [], horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0,
+    toleranciaFimMin: 0, dias: [1,2,3,4,5,6], escopo: 'todas', ativa: true,
+    vigenciaInicio: hoje, vigenciaFim: '', origem: 'personalizada'
+  };
+
+  document.getElementById('routineEditorId').value = editando ? rotina.id : '';
+  document.getElementById('routineName').value = duplicar ? `Cópia de ${rotina.nome}` : rotina.nome;
+  document.getElementById('routineMokiName').value = duplicar ? '' : rotina.nomeMoki;
+  document.getElementById('routineAliases').value = duplicar ? '' : (rotina.aliases || []).join('\n');
+  document.getElementById('routineScope').value = rotina.escopo === '12x36' ? '12x36' : 'todas';
+  document.getElementById('routineEffectiveStart').value = duplicar ? hoje : (editando ? (rotina.vigenciaInicio || '') : hoje);
+  document.getElementById('routineEffectiveEnd').value = duplicar ? '' : (rotina.vigenciaFim || '');
+  document.getElementById('routineStartTime').value = rotina.horarioInicio || '';
+  document.getElementById('routineEndTime').value = rotina.horarioFim || '';
+  document.getElementById('routineStartTolerance').value = rotina.toleranciaInicioMin ?? 0;
+  document.getElementById('routineEndTolerance').value = rotina.toleranciaFimMin ?? 0;
+  document.getElementById('routineActive').checked = duplicar ? true : rotina.ativa !== false;
+  definirDiasEditor(rotina.dias);
+
+  const title = document.getElementById('routineEditorTitle');
+  const subtitle = document.getElementById('routineEditorSubtitle');
+  if (title) title.textContent = editando ? 'Editar rotina' : (duplicar ? 'Duplicar rotina' : 'Nova rotina');
+  if (subtitle) subtitle.textContent = editando
+    ? 'Altere o nome, reconhecimento, dias, horários ou vigência sem perder o vínculo com o histórico.'
+    : 'Cadastre uma nova rotina com data de início para não criar pendências retroativas.';
+
+  const meta = document.getElementById('routineEditorMeta');
+  if (meta) meta.innerHTML = editando
+    ? `<span>ID permanente: <strong>${escaparHtml(rotina.id)}</strong></span><span>${rotinaPossuiHistorico(rotina.id) ? 'Possui histórico e não pode ser excluída definitivamente.' : 'Ainda não possui respostas importadas.'}</span>`
+    : '<span>O sistema criará um código permanente automaticamente.</span>';
+
+  document.getElementById('duplicateRoutineButton')?.classList.toggle('hidden', !editando);
+  document.getElementById('deactivateRoutineButton')?.classList.toggle('hidden', !editando || statusAdministrativoRotina(rotina).id === 'inativa');
+  document.getElementById('deleteRoutineButton')?.classList.toggle('hidden', !editando || rotina.origem === 'padrao' || rotinaPossuiHistorico(rotina.id));
+  const feedback = document.getElementById('routineEditorFeedback');
+  if (feedback) feedback.textContent = '';
+  editor.classList.remove('hidden');
+  editor.setAttribute('aria-hidden', 'false');
+  editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => document.getElementById('routineName')?.focus(), 50);
+}
+
+function fecharEditorRotina() {
+  const editor = document.getElementById('routineEditor');
+  if (!editor) return;
+  editor.classList.add('hidden');
+  editor.setAttribute('aria-hidden', 'true');
+  const feedback = document.getElementById('routineEditorFeedback');
+  if (feedback) feedback.textContent = '';
+}
+
+function validarConflitosRotina(candidata, idAtual = '') {
+  const chaves = new Map();
+  [candidata.nome, candidata.nomeMoki, ...(candidata.aliases || [])].forEach((valor) => {
+    const chave = slugChecklist(valor);
+    if (chave) chaves.set(chave, valor);
+  });
+  for (const rotina of configRotinas) {
+    if (rotina.id === idAtual) continue;
+    const existentes = [rotina.nome, rotina.nomeMoki, ...(rotina.aliases || [])];
+    const conflito = existentes.find((valor) => chaves.has(slugChecklist(valor)));
+    if (conflito) return `O nome “${conflito}” já está vinculado à rotina “${rotina.nome}”.`;
+  }
+  return '';
+}
+
+async function persistirRotinasEReprocessar(mensagem = 'Rotinas atualizadas.') {
+  configRotinas = normalizarConfiguracoesRotinas(configRotinas);
+  salvarStore(STORAGE_KEYS.routineConfig, configRotinas);
+  invalidarCacheDados();
+  const sincronizado = await salvarConfigNoFirebase();
+  registrosBase = snapshotsImportados.length ? consolidarSnapshotsImportados() : normalizarBaseCompleta(registrosSimulados, 'simulada');
+  aplicarBase(registrosBase, snapshotsImportados.length ? 'importada' : 'simulada', mensagem);
+  renderTabelaRotinasAdmin();
+  atualizarResumoAdmin();
+  renderHistoricoPlanilhas();
+  return sincronizado;
+}
+
+async function salvarRotinaAdmin() {
+  const feedback = document.getElementById('routineEditorFeedback');
+  const idAtual = document.getElementById('routineEditorId')?.value || '';
+  const existente = idAtual ? obterConfigRotinaPorId(idAtual) : null;
+  const nome = String(document.getElementById('routineName')?.value || '').trim().replace(/\s+/g, ' ');
+  const nomeMoki = String(document.getElementById('routineMokiName')?.value || '').trim().replace(/\s+/g, ' ');
+  const aliasesInformados = normalizarAliasesRotina(document.getElementById('routineAliases')?.value || '');
+  const dias = obterDiasEditor();
+  const escopo = document.getElementById('routineScope')?.value === '12x36' ? '12x36' : 'todas';
+  const vigenciaInicio = normalizarDataIsoSimples(document.getElementById('routineEffectiveStart')?.value || '');
+  let vigenciaFim = normalizarDataIsoSimples(document.getElementById('routineEffectiveEnd')?.value || '');
+  const ativa = Boolean(document.getElementById('routineActive')?.checked);
   const horarioInicio = validarHorario(document.getElementById('routineStartTime')?.value);
   const horarioFim = validarHorario(document.getElementById('routineEndTime')?.value);
   const toleranciaInicioMin = limitarInteiro(document.getElementById('routineStartTolerance')?.value, 0, 1440);
   const toleranciaFimMin = limitarInteiro(document.getElementById('routineEndTolerance')?.value, 0, 1440);
 
-  if (horarioInicio && horarioFim && horarioParaMinutos(horarioInicio) > horarioParaMinutos(horarioFim)) {
-    if (feedback) feedback.textContent = 'O horário de início não pode ser depois do horário de fim.';
+  if (!nome || !nomeMoki) { if (feedback) feedback.textContent = 'Informe o nome exibido e o nome do checklist no Moki.'; return; }
+  if (!dias.length) { if (feedback) feedback.textContent = 'Selecione pelo menos um dia da semana.'; return; }
+  if (!vigenciaInicio && !existente) { if (feedback) feedback.textContent = 'Informe a data de início da vigência para a nova rotina.'; return; }
+  if (existente && statusAdministrativoRotina(existente).id === 'inativa' && ativa) {
+    if (feedback) feedback.textContent = 'Para reativar sem alterar o histórico, duplique esta rotina e informe uma nova data de início.';
     return;
   }
+  if (!ativa && !vigenciaFim && (!vigenciaInicio || vigenciaInicio <= dataLocalIso())) vigenciaFim = dataLocalIso();
+  if (vigenciaFim && vigenciaFim < vigenciaInicio) { if (feedback) feedback.textContent = 'A data final não pode ser anterior à data inicial.'; return; }
+  if (horarioInicio && horarioFim && horarioParaMinutos(horarioInicio) > horarioParaMinutos(horarioFim)) { if (feedback) feedback.textContent = 'O horário de início não pode ser depois do horário de fim.'; return; }
 
-  configRotinas = configRotinas.map((item) => item.id === rotina.id ? {
-    ...item,
+  const aliases = [...aliasesInformados];
+  if (existente) {
+    [existente.nome, existente.nomeMoki].forEach((antigo) => {
+      if (antigo && ![nome, nomeMoki].some((atual) => slugChecklist(atual) === slugChecklist(antigo))) aliases.push(antigo);
+    });
+  }
+
+  const agora = new Date().toISOString();
+  const candidata = normalizarRotinaConfigurada({
+    ...(existente || {}),
+    id: existente?.id || gerarIdRotina(nome),
+    nome,
+    nomeMoki,
+    aliases: normalizarAliasesRotina(aliases),
+    dias,
+    escopo,
+    vigenciaInicio,
+    vigenciaFim,
+    ativa,
     horarioInicio,
     horarioFim,
     toleranciaInicioMin,
-    toleranciaFimMin
-  } : item);
-  invalidarCacheDados();
+    toleranciaFimMin,
+    origem: existente?.origem || 'personalizada',
+    ordem: existente?.ordem || (Math.max(0, ...configRotinas.map((item) => Number(item.ordem) || 0)) + 1),
+    createdAt: existente?.createdAt || agora,
+    updatedAt: agora,
+    firstUsedAt: existente?.firstUsedAt || '',
+    lastUsedAt: existente?.lastUsedAt || ''
+  }, existente?.origem === 'padrao' ? ROTINAS_PADRAO.find((item) => item.id === existente.id) : null, existente?.ordem || configRotinas.length + 1);
 
-  salvarStore(STORAGE_KEYS.routineConfig, configRotinas);
-  const sincronizado = await salvarConfigNoFirebase();
-  registrosBase = consolidarSnapshotsImportados();
-  aplicarBase(
-    registrosBase,
-    snapshotsImportados.length ? 'importada' : 'simulada',
-    importSummary?.textContent || 'Regras atualizadas.'
-  );
-  preencherRegraRotinaSelecionada();
-  renderHistoricoPlanilhas();
+  const conflito = validarConflitosRotina(candidata, existente?.id || '');
+  if (conflito) { if (feedback) feedback.textContent = conflito; return; }
 
-  if (feedback) {
-    feedback.textContent = sincronizado || !firebaseDisponivel
-      ? `Regra salva para “${rotina.nome}”.`
-      : `Regra salva neste dispositivo, mas a sincronização online não foi concluída.`;
+  if (existente) configRotinas = configRotinas.map((item) => item.id === existente.id ? candidata : item);
+  else configRotinas = [...configRotinas, candidata];
+
+  const sincronizado = await persistirRotinasEReprocessar(`Rotina “${nome}” salva e aplicada ao painel.`);
+  if (feedback) feedback.textContent = sincronizado || !firebaseDisponivel
+    ? `Rotina “${nome}” salva com sucesso.`
+    : 'A rotina foi salva neste dispositivo, mas a sincronização online não foi concluída.';
+  renderTabelaRotinasAdmin();
+  setTimeout(fecharEditorRotina, 650);
+}
+
+async function desativarRotinaAdmin(rotinaId) {
+  const rotina = obterConfigRotinaPorId(rotinaId);
+  if (!rotina) return;
+  const hoje = dataLocalIso();
+  const aindaNaoIniciou = rotina.vigenciaInicio && rotina.vigenciaInicio > hoje;
+  const dataFim = aindaNaoIniciou ? '' : hoje;
+  const descricaoFim = aindaNaoIniciou ? 'antes de entrar em vigência' : `com vigência até ${dataFim.split('-').reverse().join('/')}`;
+  if (!window.confirm(`Desativar “${rotina.nome}” ${descricaoFim}? O histórico anterior será preservado.`)) return;
+  configRotinas = configRotinas.map((item) => item.id === rotinaId ? { ...item, ativa: false, vigenciaFim: item.vigenciaFim || dataFim, updatedAt: new Date().toISOString() } : item);
+  await persistirRotinasEReprocessar(`Rotina “${rotina.nome}” desativada.`);
+  fecharEditorRotina();
+}
+
+async function excluirRotinaAdmin(rotinaId) {
+  const rotina = obterConfigRotinaPorId(rotinaId);
+  if (!rotina) return;
+  if (rotina.origem === 'padrao' || rotinaPossuiHistorico(rotinaId)) {
+    const feedback = document.getElementById('routineManagerFeedback');
+    if (feedback) feedback.textContent = 'Esta rotina possui histórico ou pertence ao cadastro original. Use “Desativar” para preservar os relatórios.';
+    return;
   }
+  if (!window.confirm(`Excluir definitivamente a rotina “${rotina.nome}”?`)) return;
+  configRotinas = configRotinas.filter((item) => item.id !== rotinaId);
+  await persistirRotinasEReprocessar(`Rotina “${rotina.nome}” excluída.`);
+  fecharEditorRotina();
+}
+
+function registrarUsoRotinas(respostas = []) {
+  const porRotina = new Map();
+  respostas.forEach((resposta) => {
+    if (!resposta?.rotinaId || !resposta?.data) return;
+    const atual = porRotina.get(resposta.rotinaId) || { min: resposta.data, max: resposta.data };
+    if (resposta.data < atual.min) atual.min = resposta.data;
+    if (resposta.data > atual.max) atual.max = resposta.data;
+    porRotina.set(resposta.rotinaId, atual);
+  });
+  if (!porRotina.size) return false;
+  let mudou = false;
+  configRotinas = configRotinas.map((rotina) => {
+    const uso = porRotina.get(rotina.id);
+    if (!uso) return rotina;
+    mudou = true;
+    return {
+      ...rotina,
+      firstUsedAt: rotina.firstUsedAt && rotina.firstUsedAt.slice(0, 10) <= uso.min ? rotina.firstUsedAt : `${uso.min}T00:00:00`,
+      lastUsedAt: rotina.lastUsedAt && rotina.lastUsedAt.slice(0, 10) >= uso.max ? rotina.lastUsedAt : `${uso.max}T23:59:59`,
+      updatedAt: new Date().toISOString()
+    };
+  });
+  return mudou;
+}
+
+
+function formatarRegional(regionalId) {
+  return REGIONAIS_POR_ID.get(regionalId)?.nome || 'Sem regional';
+}
+
+function renderTabelaRegionaisAdmin() {
+  const tbody = document.getElementById('regionalUnitsTable');
+  if (!tbody) return;
+  const busca = slug(document.getElementById('adminRegionalSearch')?.value || '');
+  const filtro = document.getElementById('adminRegionalFilter')?.value || '';
+  const lojas = LOJAS_ATIVAS.filter((loja) => {
+    const regionalId = resolverRegional(loja.nome, loja.codigo).id;
+    const matchBusca = !busca || slug(`${loja.codigo} ${loja.nome}`).includes(busca);
+    const matchFiltro = !filtro || regionalId === filtro;
+    return matchBusca && matchFiltro;
+  });
+  if (!lojas.length) {
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">Nenhuma unidade encontrada.</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = lojas.map((loja) => {
+    const regionalId = resolverRegional(loja.nome, loja.codigo).id;
+    const options = [`<option value="sem_regional" ${regionalId === 'sem_regional' ? 'selected' : ''}>Sem regional</option>`, ...REGIONAIS.map((regional) => `<option value="${regional.id}" ${regional.id === regionalId ? 'selected' : ''}>${escaparHtml(regional.nome)}</option>`)].join('');
+    return `<tr><td><span class="admin-code-pill">${escaparHtml(loja.codigo)}</span></td><td><strong>${escaparHtml(loja.nome)}</strong></td><td><select class="regional-row-select" data-code="${escaparHtml(loja.codigo)}">${options}</select></td><td>${CODIGOS_LOJAS_12X36.has(loja.codigo) ? '<span class="status-tag">Sim</span>' : '<span class="status-tag muted">Não</span>'}</td><td>${escaparHtml(resolverFormador(loja.nome))}</td></tr>`;
+  }).join('');
+}
+
+function renderTabelaUnidadesAdmin() {
+  const tbody = document.getElementById('adminUnitsTable');
+  if (!tbody) return;
+  tbody.innerHTML = LOJAS_ATIVAS.map((loja) => {
+    const info = parseLoja(loja.nome);
+    const regional = resolverRegional(loja.nome, loja.codigo);
+    return `<tr><td><span class="admin-code-pill">${escaparHtml(loja.codigo)}</span></td><td><strong>${escaparHtml(loja.nome)}</strong></td><td>${escaparHtml(info.rede)}</td><td>${escaparHtml(regional.nome)}</td><td>${escaparHtml(resolverFormador(loja.nome))}</td><td>${CODIGOS_LOJAS_12X36.has(loja.codigo) ? 'Sim' : 'Não'}</td><td><span class="status-tag success">Ativa</span></td></tr>`;
+  }).join('');
+}
+
+async function salvarRegionaisAdmin() {
+  const selects = [...document.querySelectorAll('.regional-row-select[data-code]')];
+  selects.forEach((select) => {
+    const codigo = normalizarCodigoUnidade(select.dataset.code);
+    const regionalId = select.value;
+    if (REGIONAIS_POR_ID.has(regionalId) || regionalId === 'sem_regional') lojaRegionalMap[codigo] = regionalId;
+    else lojaRegionalMap[codigo] = 'sem_regional';
+  });
+  lojaRegionalMap = sanitizarMapaRegionais(lojaRegionalMap);
+  regionalMapRevisado = true;
+  salvarStore(STORAGE_KEYS.storeRegionalMap, lojaRegionalMap);
+  localStorage.setItem(STORAGE_KEYS.regionalMapReviewed, '1');
+  const sincronizado = await salvarConfigNoFirebase();
+  invalidarCacheDados();
+  registrosBase = snapshotsImportados.length ? consolidarSnapshotsImportados() : normalizarBaseCompleta(registrosSimulados, 'simulada');
+  aplicarBase(registrosBase, snapshotsImportados.length ? 'importada' : 'simulada', importSummary?.textContent || 'Regionais atualizadas.');
+  renderTabelaRegionaisAdmin();
+  renderTabelaUnidadesAdmin();
+  atualizarResumoAdmin();
+  const feedback = document.getElementById('regionalConfigFeedback');
+  if (feedback) feedback.textContent = sincronizado || !firebaseDisponivel ? 'Regionais salvas com sucesso.' : 'Regionais salvas neste dispositivo, mas a sincronização online falhou.';
 }
 
 function popularControlesAdmin() {
@@ -2766,9 +3529,12 @@ function popularControlesAdmin() {
   preencherSelect(document.getElementById('adminLojaSelect'), lojas, 'Selecione a loja');
   preencherSelect(document.getElementById('renameLojaSelect'), lojas, 'Selecione a loja');
   preencherSelect(document.getElementById('adminFormadorSelect'), formadores, 'Selecione o formador');
-  popularRotinasConfigAdmin();
+  renderTabelaRotinasAdmin();
   renderVinculosLista();
   renderRenamesLista();
+  renderTabelaRegionaisAdmin();
+  renderTabelaUnidadesAdmin();
+  atualizarResumoAdmin();
 }
 
 function renderVinculosLista() {
@@ -2795,22 +3561,29 @@ function renderRenamesLista() {
   container.innerHTML = entries.map(([originalSlug, novoNome]) => `<div class="rename-row"><div><strong>${escaparHtml(originalSlug)}</strong><span>${escaparHtml(novoNome)}</span></div></div>`).join('');
 }
 
+function obterHistoricoLeve() {
+  const mapa = new Map();
+  resumosDiarios.map(normalizarResumoDiario).filter(Boolean).forEach((item) => mapa.set(item.id, item));
+  snapshotsImportados.map(normalizarResumoDiario).filter(Boolean).forEach((item) => mapa.set(item.id, { ...mapa.get(item.id), ...item }));
+  return [...mapa.values()]
+    .sort((a, b) => String(b.latestDate || '').localeCompare(String(a.latestDate || '')))
+    .slice(0, LIMITE_RESUMOS_HISTORICOS);
+}
+
 function renderHistoricoPlanilhas() {
   const container = document.getElementById('historicoPlanilhas');
   if (!container) return;
-  if (!snapshotsImportados.length) {
+  const historico = obterHistoricoLeve();
+  if (!historico.length) {
     container.innerHTML = '<div class="empty-state">Nenhuma importação foi processada ainda.</div>';
     return;
   }
 
-  container.innerHTML = snapshotsImportados.map((snapshot) => {
+  const historicoVisivel = historico.slice(0, limiteHistoricoVisivel);
+  const cards = historicoVisivel.map((snapshot) => {
     const dataImportacao = new Date(snapshot.importedAt).toLocaleString('pt-BR');
     const dataReferencia = snapshot.latestDate ? snapshot.latestDate.split('-').reverse().join('/') : 'não identificada';
-    const resumo = snapshot.summary || (() => {
-      const data = formatarData(snapshot.latestDate);
-      if (!data) return {};
-      return resumirResultadosImportacao(gerarResultadosBaseParaData(data, obterRespostasPersistidas()).resultados);
-    })();
+    const resumo = snapshot.summary || {};
     const rawDisponivel = snapshot.rawAvailable !== false && snapshot.rawExpiresAt && !dadosBrutosExpirados(snapshot);
     const expiraTexto = snapshot.rawExpiresAt ? new Date(snapshot.rawExpiresAt).toLocaleString('pt-BR') : '';
     const statusRaw = rawDisponivel
@@ -2832,6 +3605,12 @@ function renderHistoricoPlanilhas() {
         </div>
       </div>`;
   }).join('');
+
+  const restante = Math.max(0, historico.length - historicoVisivel.length);
+  container.innerHTML = `${cards}${restante ? `
+    <div class="history-load-more">
+      <button class="btn btn-secondary" type="button" data-action="load-more-history">Carregar mais ${Math.min(30, restante)} dia(s)</button>
+    </div>` : ''}`;
 }
 
 function salvarVinculoLoja() {
@@ -2879,8 +3658,24 @@ function salvarNovoNomeLoja() {
 }
 
 async function usarSnapshot(snapshotId) {
-  const snapshot = snapshotsImportados.find((item) => item.id === snapshotId);
-  if (!snapshot) return;
+  let snapshot = snapshotsImportados.find((item) => item.id === snapshotId);
+  if (!snapshot && firebaseDisponivel && firebaseApi && db) {
+    try {
+      const docSnap = await firebaseApi.getDoc(firebaseApi.doc(db, 'painel_snapshots', snapshotId));
+      if (docSnap.exists()) {
+        const meta = normalizarSnapshotFirebase({ id: docSnap.id, ...docSnap.data() });
+        snapshot = { ...meta, data: await carregarDadosSnapshotNoFirebase(meta), dataLoaded: true };
+        snapshotsSobDemanda = [snapshot];
+        recomporSnapshotsAtivos();
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dia para reprocessamento:', error);
+    }
+  }
+  if (!snapshot) {
+    setImportStatus('Não foi possível carregar os detalhes desse dia para reprocessar.', 'Detalhes indisponíveis');
+    return;
+  }
 
   const data = formatarData(snapshot.latestDate);
   const respostas = (Array.isArray(snapshot.data) ? snapshot.data : [])
@@ -2898,8 +3693,7 @@ async function usarSnapshot(snapshotId) {
     summary: resumirResultadosImportacao(gerado.resultados)
   };
 
-  snapshotsImportados = snapshotsImportados.map((item) => item.id === snapshotId ? atualizado : item);
-  invalidarCacheDados();
+  substituirSnapshotLocal(atualizado);
   persistirSnapshotsLocais();
   atualizarBasePorSnapshots(`Planilha ${snapshot.fileName} reprocessada e aplicada no painel.`);
   const sincronizado = await salvarSnapshotNoFirebase(atualizado);
@@ -2912,15 +3706,18 @@ async function usarSnapshot(snapshotId) {
 }
 
 async function excluirSnapshot(snapshotId) {
-  const snapshot = snapshotsImportados.find((item) => item.id === snapshotId);
+  const snapshot = snapshotsImportados.find((item) => item.id === snapshotId)
+    || obterHistoricoLeve().find((item) => item.id === snapshotId);
   if (!snapshot) return;
-  snapshotsImportados = snapshotsImportados.filter((item) => item.id !== snapshotId);
-  invalidarCacheDados();
+  snapshotsRecentes = snapshotsRecentes.filter((item) => item.id !== snapshotId);
+  snapshotsSobDemanda = snapshotsSobDemanda.filter((item) => item.id !== snapshotId);
+  resumosDiarios = resumosDiarios.filter((item) => item.id !== snapshotId);
+  recomporSnapshotsAtivos();
   persistirSnapshotsLocais();
   atualizarBasePorSnapshots(
     snapshotsImportados.length
-      ? `Planilha ${snapshot.fileName} removida. O painel foi recalculado com as demais importações.`
-      : 'Planilha removida. O painel ficou sem dados importados.'
+      ? `Planilha ${snapshot.fileName} removida. O painel foi recalculado com os detalhes carregados.`
+      : 'Planilha removida. O painel ficou sem dados detalhados carregados.'
   );
 
   const sincronizado = await excluirSnapshotNoFirebase(snapshotId);
@@ -2933,10 +3730,32 @@ async function excluirSnapshot(snapshotId) {
 }
 
 function configurarAdmin() {
-  const modal = document.getElementById('adminModal');
+  const experiencia = document.getElementById('adminModal');
   const loginView = document.getElementById('adminLoginView');
   const panelView = document.getElementById('adminPanelView');
   const loginFeedback = document.getElementById('adminLoginFeedback');
+  const titulos = {
+    'visao-geral': 'Visão geral',
+    importacao: 'Importações',
+    regionais: 'Configuração de regionais',
+    unidades: 'Unidades ativas',
+    rotinas: 'Rotinas e tolerâncias',
+    vinculos: 'Equipe e formadores',
+    nomes: 'Padronização de nomes',
+    historico: 'Histórico de importações',
+    configuracoes: 'Configurações do sistema'
+  };
+
+  function ativarSecao(tab = 'visao-geral') {
+    document.querySelectorAll('.admin-tab').forEach((item) => item.classList.toggle('active', item.dataset.tab === tab));
+    document.querySelectorAll('.admin-tab-panel').forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === tab));
+    const titulo = document.getElementById('adminPageTitle');
+    if (titulo) titulo.textContent = titulos[tab] || 'Administração';
+    if (tab === 'regionais') renderTabelaRegionaisAdmin();
+    if (tab === 'unidades') renderTabelaUnidadesAdmin();
+    if (tab === 'historico') renderHistoricoPlanilhas();
+    if (tab === 'rotinas') renderTabelaRotinasAdmin();
+  }
 
   function refreshAdminView() {
     const isLogged = localStorage.getItem(STORAGE_KEYS.adminLogged) === '1';
@@ -2946,23 +3765,27 @@ function configurarAdmin() {
       atualizarResumoAdmin();
       popularControlesAdmin();
       renderHistoricoPlanilhas();
+      ativarSecao(document.querySelector('.admin-tab.active')?.dataset.tab || 'visao-geral');
     }
   }
 
-  const abrirModal = () => {
-    window.PainelSF.abrirAdminModal();
+  const abrirAdmin = () => {
+    experiencia.classList.remove('hidden');
+    experiencia.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('admin-mode');
     refreshAdminView();
   };
-
-  const fecharModal = () => {
-    window.PainelSF.fecharAdminModal();
+  const fecharAdmin = () => {
+    experiencia.classList.add('hidden');
+    experiencia.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('admin-mode');
   };
 
-  document.getElementById('adminToggle').addEventListener('click', abrirModal);
-  document.getElementById('closeAdmin').addEventListener('click', fecharModal);
-  document.getElementById('adminOverlay').addEventListener('click', fecharModal);
+  document.getElementById('adminToggle')?.addEventListener('click', abrirAdmin);
+  document.getElementById('closeAdmin')?.addEventListener('click', fecharAdmin);
+  document.getElementById('adminBackDashboard')?.addEventListener('click', fecharAdmin);
 
-  document.getElementById('adminLoginForm').addEventListener('submit', (event) => {
+  document.getElementById('adminLoginForm')?.addEventListener('submit', (event) => {
     event.preventDefault();
     const user = document.getElementById('adminUser').value.trim();
     const pass = document.getElementById('adminPass').value.trim();
@@ -2975,33 +3798,73 @@ function configurarAdmin() {
     }
   });
 
-  document.getElementById('adminLogout').addEventListener('click', () => {
+  document.getElementById('adminLogout')?.addEventListener('click', () => {
     localStorage.removeItem(STORAGE_KEYS.adminLogged);
     refreshAdminView();
   });
 
   document.querySelectorAll('.admin-tab').forEach((button) => {
-    button.addEventListener('click', () => {
-      document.querySelectorAll('.admin-tab').forEach((item) => item.classList.toggle('active', item === button));
-      document.querySelectorAll('.admin-tab-panel').forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === button.dataset.tab));
-    });
+    button.addEventListener('click', () => ativarSecao(button.dataset.tab));
   });
 
-  document.getElementById('saveLojaVinculo').addEventListener('click', salvarVinculoLoja);
-  document.getElementById('saveLojaRename').addEventListener('click', salvarNovoNomeLoja);
-  const routineConfigSelect = document.getElementById('routineConfigSelect');
-  const saveRoutineConfig = document.getElementById('saveRoutineConfig');
-  if (routineConfigSelect) routineConfigSelect.addEventListener('change', preencherRegraRotinaSelecionada);
-  if (saveRoutineConfig) saveRoutineConfig.addEventListener('click', salvarRegraRotina);
+  document.getElementById('saveLojaVinculo')?.addEventListener('click', salvarVinculoLoja);
+  document.getElementById('saveLojaRename')?.addEventListener('click', salvarNovoNomeLoja);
+  document.getElementById('saveRegionals')?.addEventListener('click', salvarRegionaisAdmin);
+  document.getElementById('adminRegionalSearch')?.addEventListener('input', renderTabelaRegionaisAdmin);
+  document.getElementById('adminRegionalFilter')?.addEventListener('change', renderTabelaRegionaisAdmin);
+
+  document.getElementById('createRoutineButton')?.addEventListener('click', () => abrirEditorRotina());
+  document.getElementById('closeRoutineEditor')?.addEventListener('click', fecharEditorRotina);
+  document.getElementById('cancelRoutineButton')?.addEventListener('click', fecharEditorRotina);
+  document.getElementById('saveRoutineButton')?.addEventListener('click', salvarRotinaAdmin);
+  document.getElementById('duplicateRoutineButton')?.addEventListener('click', () => {
+    const id = document.getElementById('routineEditorId')?.value;
+    if (id) abrirEditorRotina(id, true);
+  });
+  document.getElementById('deactivateRoutineButton')?.addEventListener('click', () => {
+    const id = document.getElementById('routineEditorId')?.value;
+    if (id) desativarRotinaAdmin(id);
+  });
+  document.getElementById('deleteRoutineButton')?.addEventListener('click', () => {
+    const id = document.getElementById('routineEditorId')?.value;
+    if (id) excluirRotinaAdmin(id);
+  });
+  document.getElementById('adminRoutineSearch')?.addEventListener('input', renderTabelaRotinasAdmin);
+  document.getElementById('adminRoutineStatusFilter')?.addEventListener('change', renderTabelaRotinasAdmin);
+  document.getElementById('adminRoutinesTable')?.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-routine-action]');
+    if (!button) return;
+    const id = button.dataset.id;
+    const action = button.dataset.routineAction;
+    if (action === 'edit') abrirEditorRotina(id);
+    if (action === 'duplicate') abrirEditorRotina(id, true);
+    if (action === 'deactivate') desativarRotinaAdmin(id);
+    if (action === 'delete') excluirRotinaAdmin(id);
+  });
+  document.getElementById('routineActive')?.addEventListener('change', (event) => {
+    const fim = document.getElementById('routineEffectiveEnd');
+    const inicio = document.getElementById('routineEffectiveStart')?.value || '';
+    if (!event.target.checked && fim && !fim.value && (!inicio || inicio <= dataLocalIso())) fim.value = dataLocalIso();
+  });
+
   const historicoPlanilhas = document.getElementById('historicoPlanilhas');
   if (historicoPlanilhas) {
     historicoPlanilhas.addEventListener('click', (event) => {
       const button = event.target.closest('button[data-action]');
       if (!button) return;
+      if (button.dataset.action === 'load-more-history') {
+        limiteHistoricoVisivel += 30;
+        renderHistoricoPlanilhas();
+        return;
+      }
       if (button.dataset.action === 'apply-snapshot') usarSnapshot(button.dataset.id);
       if (button.dataset.action === 'delete-snapshot') excluirSnapshot(button.dataset.id);
     });
   }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !experiencia.classList.contains('hidden')) fecharAdmin();
+  });
 
   refreshAdminView();
 }
@@ -3106,11 +3969,12 @@ function ativarResumoMensalSemSobrescreverDatas() {
   });
 }
 
-function aplicarFiltroComResumoMensal({ preservarDatas = false, sincronizarDependentes = false } = {}) {
+async function aplicarFiltroComResumoMensal({ preservarDatas = false, sincronizarDependentes = false } = {}) {
   if (sincronizarDependentes) sincronizarFiltrosDependentes();
   if (preservarDatas) {
     ativarResumoMensalSemSobrescreverDatas();
-    renderizarPainel();
+    const pronto = await prepararFiltrosComDetalhes();
+    if (pronto) renderizarPainel();
   } else {
     aplicarPeriodoResumo('mensal');
   }
@@ -3159,22 +4023,28 @@ window.PainelSF = Object.assign(window.PainelSF || {}, {
     if (!modal) return;
     modal.classList.remove('hidden');
     modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('admin-mode');
   },
   fecharAdminModal() {
     const modal = document.getElementById('adminModal');
     if (!modal) return;
     modal.classList.add('hidden');
     modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('admin-mode');
   },
   aplicarPeriodoResumo,
+  selecionarRegionalDashboard,
   abrirApresentacao,
   fecharApresentacao,
   proximoSlideApresentacao() { irParaSlideApresentacao(apresentacaoState.slideAtual + 1); },
   slideAnteriorApresentacao() { irParaSlideApresentacao(apresentacaoState.slideAtual - 1); },
   alternarAutoplayApresentacao,
   alternarFullscreenApresentacao,
-  aplicarFiltrosRapido() {
-    try { renderizarPainel(); } catch (error) { console.error(error); }
+  async aplicarFiltrosRapido() {
+    try {
+      const pronto = await prepararFiltrosComDetalhes();
+      if (pronto) renderizarPainel();
+    } catch (error) { console.error(error); }
     document.body.classList.remove('sidebar-open');
   },
   limparFiltrosRapido() {
@@ -3676,6 +4546,7 @@ function inicializarAplicacao() {
   configurarSidebar();
   configurarEventos();
   configurarAdmin();
+  configurarAbasRegionaisDashboard();
   configurarAbasResumo();
   configurarApresentacao();
   salvarStore(STORAGE_KEYS.routineConfig, configRotinas);

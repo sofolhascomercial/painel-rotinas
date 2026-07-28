@@ -1,0 +1,24 @@
+PAINEL DE ROTINAS SÓ FOLHAS — ROTINAS DINÂMICAS
+
+Arquivos de produção:
+- index.html
+- script.js
+- style.css
+- leaf-logo.png
+- logo-sofolhas.png
+
+Para atualizar:
+1. Substitua todos os arquivos atuais pelos arquivos desta pasta.
+2. Mantenha os cinco arquivos juntos na mesma pasta.
+3. Abra o sistema e pressione Ctrl + F5.
+
+Na área ADM > Rotinas agora é possível:
+- criar nova rotina;
+- editar e renomear;
+- configurar nome do checklist Moki e aliases;
+- definir dias, aplicação, horários e tolerâncias;
+- definir início e fim de vigência;
+- duplicar e desativar;
+- excluir somente rotinas personalizadas sem histórico.
+
+Os nomes antigos são preservados como aliases quando uma rotina é renomeada.

@@ -131,6 +131,23 @@
         </div>
       </section>
 
+      <section class="regional-tabs-shell" aria-label="Seleção de regional">
+        <div class="regional-tabs" id="regionalDashboardTabs">
+          <button class="regional-tab active" data-regional="geral" type="button">
+            <span class="regional-tab-icon">◉</span>
+            <span><strong>Visão Geral</strong><small>Todas as 62 unidades</small></span>
+          </button>
+          <button class="regional-tab" data-regional="df_go" type="button">
+            <span class="regional-tab-icon">DF</span>
+            <span><strong>Regional DF/GO</strong><small id="regionalCountDfGo">0 unidades</small></span>
+          </button>
+          <button class="regional-tab" data-regional="goiania_fora" type="button">
+            <span class="regional-tab-icon">GO</span>
+            <span><strong>Regional Goiânia – Lojas Fora</strong><small id="regionalCountGoiania">0 unidades</small></span>
+          </button>
+        </div>
+        <div id="regionalDashboardNotice" class="regional-dashboard-notice hidden"></div>
+      </section>
 
       <section class="kpi-grid hero-kpi-grid">
         <div class="hero-left-stack">
@@ -321,208 +338,265 @@
     </div>
   </div>
 
-  <div id="adminModal" class="modal hidden" aria-hidden="true">
-    <div id="adminOverlay" class="modal-overlay" onclick="window.PainelSF && window.PainelSF.fecharAdminModal()"></div>
-    <div class="modal-card admin-card">
-      <button id="closeAdmin" class="modal-close" type="button" aria-label="Fechar" onclick="window.PainelSF && window.PainelSF.fecharAdminModal()">×</button>
+  <div id="adminModal" class="admin-experience hidden" aria-hidden="true">
+    <div id="adminOverlay" class="hidden"></div>
 
-      <div id="adminLoginView">
-        <div class="section-head compact-head admin-head">
-          <div>
-            <span class="eyebrow">Área administrativa</span>
-            <h2>Acesso restrito</h2>
-          </div>
+    <section id="adminLoginView" class="admin-login-face">
+      <div class="admin-login-brand">
+        <img src="./logo-sofolhas.png" alt="Só Folhas Hortifruti" />
+        <div>
+          <span class="eyebrow">Painel de Rotinas</span>
+          <strong>Administração</strong>
         </div>
-        <form id="adminLoginForm" class="admin-login-form">
-          <label class="field">
-            <span>Usuário</span>
-            <input id="adminUser" type="text" autocomplete="username" placeholder="Digite o usuário" />
-          </label>
-          <label class="field">
-            <span>Senha</span>
-            <input id="adminPass" type="password" autocomplete="current-password" placeholder="Digite a senha" />
-          </label>
-          <button class="btn btn-primary" type="submit">Entrar</button>
-          <div id="adminLoginFeedback" class="admin-feedback"></div>
-        </form>
       </div>
-
-      <div id="adminPanelView" class="hidden">
-        <div class="section-head admin-toolbar">
-          <div>
-            <span class="eyebrow">Administrativo</span>
-            <h2>Importação e ajustes do painel</h2>
-            <p id="adminSummary" class="admin-summary"></p>
-          </div>
-          <div class="admin-toolbar-actions">
-            <span class="admin-user-pill">richard.martins</span>
-            <button id="adminLogout" class="btn btn-secondary" type="button">Sair</button>
+      <div class="admin-login-layout">
+        <div class="admin-login-copy">
+          <span class="admin-login-kicker">Gestão operacional integrada</span>
+          <h2>Controle as regionais, unidades, rotinas e importações em um ambiente exclusivo.</h2>
+          <p>As configurações administrativas ficam separadas do dashboard operacional para manter a navegação mais clara, segura e profissional.</p>
+          <div class="admin-login-feature-grid">
+            <div><strong>62</strong><span>unidades ativas</span></div>
+            <div><strong>18</strong><span>rotinas cadastradas</span></div>
+            <div><strong>2</strong><span>regionais operacionais</span></div>
           </div>
         </div>
-
-        <div class="admin-tabs">
-          <button class="admin-tab active" data-tab="importacao" type="button">Importar planilhas</button>
-          <button class="admin-tab" data-tab="vinculos" type="button">Vincular lojas</button>
-          <button class="admin-tab" data-tab="nomes" type="button">Alterar nomes</button>
+        <div class="admin-login-card">
+          <button id="closeAdmin" class="admin-back-link" type="button">← Voltar ao dashboard</button>
+          <div class="admin-login-card-head">
+            <span class="eyebrow">Acesso restrito</span>
+            <h3>Entrar no painel administrativo</h3>
+            <p>Use suas credenciais para continuar.</p>
+          </div>
+          <form id="adminLoginForm" class="admin-login-form">
+            <label class="field field-full">
+              <span>Usuário</span>
+              <input id="adminUser" type="text" autocomplete="username" placeholder="Digite o usuário" />
+            </label>
+            <label class="field field-full">
+              <span>Senha</span>
+              <input id="adminPass" type="password" autocomplete="current-password" placeholder="Digite a senha" />
+            </label>
+            <button class="btn btn-primary admin-login-submit" type="submit">Entrar no painel administrativo</button>
+            <div id="adminLoginFeedback" class="admin-feedback"></div>
+          </form>
         </div>
+      </div>
+    </section>
 
-        <div class="admin-panels">
-          <section class="admin-tab-panel active" data-panel="importacao">
-            <div class="admin-grid single-col">
-              <div class="admin-block import-hero-block">
-                <div class="import-hero-header">
-                  <div>
-                    <span class="eyebrow">Importação</span>
-                    <h3>Atualizar base do painel</h3>
-                    <p class="admin-summary">Envie o relatório “Checklists Respondidos” do Moki. O sistema identifica as rotinas realizadas, gera as pendências e classifica os horários automaticamente.</p>
+    <section id="adminPanelView" class="admin-panel-face hidden">
+      <div class="admin-app-layout">
+        <aside class="admin-sidebar">
+          <div class="admin-sidebar-brand">
+            <img src="./logo-sofolhas.png" alt="Só Folhas Hortifruti" />
+            <div>
+              <strong>Painel Administrativo</strong>
+              <span>Gestão de rotinas</span>
+            </div>
+          </div>
+
+          <nav class="admin-nav" aria-label="Menu administrativo">
+            <button class="admin-tab active" data-tab="visao-geral" type="button"><span>▦</span><div><strong>Visão geral</strong><small>Resumo e alertas</small></div></button>
+            <button class="admin-tab" data-tab="importacao" type="button"><span>⇧</span><div><strong>Importações</strong><small>Enviar planilhas</small></div></button>
+            <button class="admin-tab" data-tab="regionais" type="button"><span>◎</span><div><strong>Regionais</strong><small>Separação das unidades</small></div></button>
+            <button class="admin-tab" data-tab="unidades" type="button"><span>▤</span><div><strong>Unidades</strong><small>Cadastro operacional</small></div></button>
+            <button class="admin-tab" data-tab="rotinas" type="button"><span>✓</span><div><strong>Rotinas</strong><small>Horários e tolerâncias</small></div></button>
+            <button class="admin-tab" data-tab="vinculos" type="button"><span>♙</span><div><strong>Equipe</strong><small>Formadores por loja</small></div></button>
+            <button class="admin-tab" data-tab="nomes" type="button"><span>✎</span><div><strong>Nomes</strong><small>Padronização das lojas</small></div></button>
+            <button class="admin-tab" data-tab="historico" type="button"><span>◷</span><div><strong>Histórico</strong><small>Importações processadas</small></div></button>
+            <button class="admin-tab" data-tab="configuracoes" type="button"><span>⚙</span><div><strong>Configurações</strong><small>Sistema e armazenamento</small></div></button>
+          </nav>
+
+          <div class="admin-sidebar-footer">
+            <div class="admin-session-card">
+              <span class="admin-session-avatar">RM</span>
+              <div><strong>richard.martins</strong><small>Administrador</small></div>
+            </div>
+            <button id="adminLogout" class="admin-logout-btn" type="button">Sair do ADM</button>
+          </div>
+        </aside>
+
+        <main class="admin-main">
+          <header class="admin-main-topbar">
+            <div>
+              <span class="eyebrow">Administração</span>
+              <h2 id="adminPageTitle">Visão geral</h2>
+              <p id="adminSummary" class="admin-summary"></p>
+            </div>
+            <div class="admin-main-actions">
+              <span id="adminSyncStatus" class="admin-sync-pill">● Conectando</span>
+              <button id="adminBackDashboard" class="btn btn-secondary" type="button">Voltar ao dashboard</button>
+            </div>
+          </header>
+
+          <div class="admin-panels">
+            <section class="admin-tab-panel active" data-panel="visao-geral">
+              <div class="admin-overview-grid">
+                <article class="admin-overview-card"><span>Unidades ativas</span><strong id="adminKpiUnidades">62</strong><small>Cadastro oficial</small></article>
+                <article class="admin-overview-card"><span>Sem regional</span><strong id="adminKpiSemRegional">0</strong><small>Precisam de classificação</small></article>
+                <article class="admin-overview-card"><span>Rotinas</span><strong id="adminKpiRotinas">18</strong><small>Regras ativas</small></article>
+                <article class="admin-overview-card"><span>Lojas 12x36</span><strong id="adminKpi12x36">7</strong><small>Funcionamento diário</small></article>
+              </div>
+              <div class="admin-dashboard-grid">
+                <article class="admin-block admin-status-panel">
+                  <div class="section-head compact-head"><div><span class="eyebrow">Status operacional</span><h3>Saúde do sistema</h3></div></div>
+                  <div class="admin-health-list">
+                    <div><span>Última importação</span><strong id="adminKpiUltimaImportacao">Nenhuma</strong></div>
+                    <div><span>Conexão</span><strong id="adminKpiFirebase">Verificando</strong></div>
+                    <div><span>Dias no histórico</span><strong id="adminKpiDiasHistorico">0</strong></div>
+                    <div><span>Detalhes carregados</span><strong id="adminKpiDetalhes">0</strong></div>
                   </div>
-                </div>
+                </article>
+                <article class="admin-block admin-alert-panel">
+                  <div class="section-head compact-head"><div><span class="eyebrow">Atenção</span><h3>Alertas administrativos</h3></div></div>
+                  <div id="adminAlerts" class="admin-alert-list"></div>
+                </article>
+              </div>
+              <article class="admin-block admin-regional-overview">
+                <div class="section-head compact-head"><div><span class="eyebrow">Estrutura</span><h3>Distribuição das unidades por regional</h3></div></div>
+                <div id="adminRegionalOverviewCards" class="admin-regional-card-grid"></div>
+              </article>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="importacao">
+              <div class="admin-block import-hero-block">
+                <div class="import-hero-header"><div><span class="eyebrow">Importação</span><h3>Atualizar base do painel</h3><p class="admin-summary">Envie o relatório “RelChecklist” do Moki. O sistema identifica as rotinas realizadas, gera as pendências e classifica os horários automaticamente. O modelo anterior também continua aceito.</p></div></div>
                 <label class="upload-box upload-box-large" for="fileInput">
                   <input id="fileInput" type="file" accept=".xlsx,.xlsm,.csv" multiple />
                   <span class="upload-title">Selecionar planilha</span>
-                  <span class="upload-subtitle">Formatos aceitos: XLSX, XLSM e CSV • relatório “Checklists Respondidos” do Moki • você pode selecionar vários arquivos</span>
+                  <span class="upload-subtitle">Formatos aceitos: XLSX, XLSM e CSV • você pode selecionar vários arquivos</span>
                 </label>
-                <div class="import-status-shell">
-                  <div class="status-tag status-tag-soft">Importação de planilhas</div>
-                  <div id="importSummary" class="import-summary import-summary-strong">Painel sem dados. Importe uma ou mais planilhas para carregar as rotinas.</div>
-                </div>
-                <div class="import-actions">
-                  <button id="importFile" class="btn btn-primary" type="button">Importar agora</button>
-                  <button id="resetData" class="btn btn-secondary" type="button">Limpar painel</button>
-                </div>
+                <div class="import-status-shell"><div class="status-tag status-tag-soft">Importação de planilhas</div><div id="importSummary" class="import-summary import-summary-strong">Painel sem dados. Importe uma ou mais planilhas para carregar as rotinas.</div></div>
+                <div class="import-actions"><button id="importFile" class="btn btn-primary" type="button">Importar agora</button></div>
                 <div class="import-preview-shell">
-                  <div class="section-head compact-head">
-                    <div>
-                      <span class="eyebrow">Pré-visualização</span>
-                      <h3>Planilhas selecionadas</h3>
-                    </div>
-                  </div>
+                  <div class="section-head compact-head"><div><span class="eyebrow">Pré-visualização</span><h3>Planilhas selecionadas</h3></div></div>
                   <div id="selectedFilesSummary" class="admin-summary">Nenhuma planilha selecionada.</div>
-                  <div id="importPreviewList" class="preview-list">
-                    <div class="empty-state">Selecione uma ou mais planilhas para visualizar a prévia antes de importar.</div>
-                  </div>
+                  <div id="importPreviewList" class="preview-list"><div class="empty-state">Selecione uma ou mais planilhas para visualizar a prévia antes de importar.</div></div>
                 </div>
                 <div class="admin-highlight-grid">
-                  <div class="admin-highlight-card">
-                    <strong>Reconhecimento automático</strong>
-                    <span>O sistema lê checklist, loja, data e hora da realização.</span>
-                  </div>
-                  <div class="admin-highlight-card">
-                    <strong>Pendências automáticas</strong>
-                    <span>O que não aparecer no relatório é registrado como pendente.</span>
-                  </div>
-                  <div class="admin-highlight-card">
-                    <strong>Base mais leve</strong>
-                    <span>Os dados brutos expiram em 5 dias, mas os resultados permanecem.</span>
-                  </div>
+                  <div class="admin-highlight-card"><strong>Reconhecimento automático</strong><span>O sistema lê checklist, loja, data e hora da realização.</span></div>
+                  <div class="admin-highlight-card"><strong>Pendências automáticas</strong><span>O que não aparecer no relatório é registrado como pendente.</span></div>
+                  <div class="admin-highlight-card"><strong>Base mais leve</strong><span>Os dados brutos expiram em 5 dias, mas os resultados permanecem.</span></div>
                 </div>
-                <div class="admin-block routine-settings-block">
-                  <div class="section-head compact-head">
-                    <div>
-                      <span class="eyebrow">Regras das rotinas</span>
-                      <h3>Horários e tolerâncias</h3>
-                    </div>
-                  </div>
-                  <div class="routine-settings-grid">
-                    <div class="stack-fields routine-settings-main">
-                      <label class="field field-full">
-                        <span>Rotina</span>
-                        <select id="routineConfigSelect"></select>
-                      </label>
-                      <div id="routineConfigMeta" class="import-summary import-summary-strong">Selecione uma rotina para configurar.</div>
-                    </div>
-                    <div class="routine-settings-fields">
-                      <label class="field">
-                        <span>Horário de início</span>
-                        <input id="routineStartTime" type="time" />
-                      </label>
-                      <label class="field">
-                        <span>Horário de fim</span>
-                        <input id="routineEndTime" type="time" />
-                      </label>
-                      <label class="field">
-                        <span>Tolerância início (min)</span>
-                        <input id="routineStartTolerance" type="number" min="0" max="1440" step="1" />
-                      </label>
-                      <label class="field">
-                        <span>Tolerância fim (min)</span>
-                        <input id="routineEndTolerance" type="number" min="0" max="1440" step="1" />
-                      </label>
-                    </div>
-                  </div>
-                  <div class="import-actions">
-                    <button id="saveRoutineConfig" class="btn btn-primary" type="button">Salvar regra da rotina</button>
-                  </div>
-                  <div id="routineConfigFeedback" class="admin-feedback"></div>
-                </div>
+              </div>
+            </section>
 
-                <div class="admin-block history-block">
-                  <div class="section-head compact-head">
-                    <div>
-                      <span class="eyebrow">Histórico</span>
-                      <h3>Importações processadas</h3>
-                    </div>
+            <section class="admin-tab-panel" data-panel="regionais">
+              <article class="admin-block">
+                <div class="admin-section-toolbar">
+                  <div><span class="eyebrow">Configuração de regionais</span><h3>Classificar unidades</h3><p class="admin-summary">A regional é vinculada ao código da unidade. Alterações aqui atualizam os dashboards e filtros automaticamente.</p></div>
+                  <button id="saveRegionals" class="btn btn-primary" type="button">Salvar regionais</button>
+                </div>
+                <div class="admin-table-filters">
+                  <label class="field"><span>Pesquisar unidade</span><input id="adminRegionalSearch" type="search" placeholder="Código ou nome da unidade" /></label>
+                  <label class="field"><span>Filtrar regional</span><select id="adminRegionalFilter"><option value="">Todas</option><option value="df_go">Regional DF/GO</option><option value="goiania_fora">Regional Goiânia – Lojas Fora</option><option value="sem_regional">Sem regional</option></select></label>
+                </div>
+                <div id="regionalConfigFeedback" class="admin-feedback"></div>
+                <div class="table-shell admin-table-shell"><table><thead><tr><th>Código</th><th>Unidade</th><th>Regional</th><th>12x36</th><th>Formador</th></tr></thead><tbody id="regionalUnitsTable"></tbody></table></div>
+              </article>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="unidades">
+              <article class="admin-block">
+                <div class="section-head compact-head"><div><span class="eyebrow">Cadastro oficial</span><h3>Unidades ativas</h3><p class="admin-summary">Lista controlada das lojas consideradas na geração de rotinas previstas e pendentes.</p></div></div>
+                <div class="table-shell admin-table-shell"><table><thead><tr><th>Código</th><th>Unidade</th><th>Rede</th><th>Regional</th><th>Formador</th><th>12x36</th><th>Situação</th></tr></thead><tbody id="adminUnitsTable"></tbody></table></div>
+              </article>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="rotinas">
+              <article class="admin-block routine-manager-block">
+                <div class="admin-section-toolbar">
+                  <div>
+                    <span class="eyebrow">Cadastro dinâmico</span>
+                    <h3>Gerenciar rotinas</h3>
+                    <p class="admin-summary">Crie, renomeie, duplique, programe a vigência e desative rotinas sem alterar o histórico anterior.</p>
                   </div>
-                  <div id="historicoPlanilhas" class="history-stack"></div>
+                  <button id="createRoutineButton" class="btn btn-primary" type="button">+ Nova rotina</button>
                 </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="admin-tab-panel" data-panel="vinculos">
-            <div class="admin-grid two-cols">
-              <div class="admin-block">
-                <h3>Vincular loja ao formador</h3>
-                <div class="stack-fields">
-                  <label class="field">
-                    <span>Loja</span>
-                    <select id="adminLojaSelect"></select>
-                  </label>
-                  <label class="field">
-                    <span>Formador</span>
-                    <select id="adminFormadorSelect"></select>
-                  </label>
-                  <button id="saveLojaVinculo" class="btn btn-primary" type="button">Salvar vínculo</button>
+                <div class="admin-table-filters routine-table-filters">
+                  <label class="field"><span>Pesquisar rotina</span><input id="adminRoutineSearch" type="search" placeholder="Nome, checklist Moki ou código" /></label>
+                  <label class="field"><span>Situação</span><select id="adminRoutineStatusFilter"><option value="">Todas</option><option value="ativa">Ativas</option><option value="agendada">Agendadas</option><option value="inativa">Inativas</option></select></label>
                 </div>
-                <div id="linkFeedback" class="admin-feedback"></div>
-              </div>
-              <div class="admin-block">
-                <h3>Mapa atual de lojas</h3>
-                <div id="vinculosLista" class="admin-scroll-list"></div>
-              </div>
-            </div>
-          </section>
-
-          <section class="admin-tab-panel" data-panel="nomes">
-            <div class="admin-grid two-cols">
-              <div class="admin-block">
-                <h3>Alterar nome da loja</h3>
-                <div class="stack-fields">
-                  <label class="field">
-                    <span>Loja atual</span>
-                    <select id="renameLojaSelect"></select>
-                  </label>
-                  <label class="field">
-                    <span>Novo nome</span>
-                    <input id="renameLojaInput" type="text" placeholder="Ex.: DD RECANTO DAS EMAS" />
-                  </label>
-                  <button id="saveLojaRename" class="btn btn-primary" type="button">Salvar novo nome</button>
+                <div id="routineManagerFeedback" class="admin-feedback"></div>
+                <div class="table-shell admin-table-shell routine-table-shell">
+                  <table>
+                    <thead><tr><th>Rotina</th><th>Dias</th><th>Aplicação</th><th>Vigência</th><th>Situação</th><th>Ações</th></tr></thead>
+                    <tbody id="adminRoutinesTable"></tbody>
+                  </table>
                 </div>
-                <div id="renameFeedback" class="admin-feedback"></div>
-              </div>
-              <div class="admin-block">
-                <h3>Nomes personalizados</h3>
-                <div id="renamesLista" class="admin-scroll-list"></div>
-              </div>
-            </div>
-          </section>
+              </article>
 
-          
-        </div>
+              <article id="routineEditor" class="admin-block routine-editor-block hidden" aria-hidden="true">
+                <div class="routine-editor-header">
+                  <div><span class="eyebrow">Editor de rotina</span><h3 id="routineEditorTitle">Nova rotina</h3><p id="routineEditorSubtitle" class="admin-summary">Defina como o sistema reconhecerá e cobrará esta atividade.</p></div>
+                  <button id="closeRoutineEditor" class="icon-button" type="button" aria-label="Fechar editor">×</button>
+                </div>
+                <input id="routineEditorId" type="hidden" />
+                <div class="routine-editor-grid">
+                  <label class="field field-wide"><span>Nome exibido no dashboard *</span><input id="routineName" type="text" maxlength="160" placeholder="Ex.: Conferência da banca de saída" /></label>
+                  <label class="field field-wide"><span>Nome do checklist no Moki *</span><input id="routineMokiName" type="text" maxlength="200" placeholder="Nome exatamente como aparece na planilha" /></label>
+                  <label class="field field-wide"><span>Nomes alternativos</span><textarea id="routineAliases" rows="3" placeholder="Um nome por linha. Use para reconhecer nomes antigos ou variações do Moki."></textarea></label>
+                  <label class="field"><span>Aplicação *</span><select id="routineScope"><option value="todas">Todas as lojas ativas</option><option value="12x36">Somente lojas 12x36</option></select></label>
+                  <label class="field"><span>Início da vigência (obrigatório para nova rotina)</span><input id="routineEffectiveStart" type="date" /></label>
+                  <label class="field"><span>Fim da vigência</span><input id="routineEffectiveEnd" type="date" /></label>
+                  <label class="field"><span>Horário de início</span><input id="routineStartTime" type="time" /></label>
+                  <label class="field"><span>Horário de fim</span><input id="routineEndTime" type="time" /></label>
+                  <label class="field"><span>Tolerância início (min)</span><input id="routineStartTolerance" type="number" min="0" max="1440" step="1" value="0" /></label>
+                  <label class="field"><span>Tolerância fim (min)</span><input id="routineEndTolerance" type="number" min="0" max="1440" step="1" value="0" /></label>
+                </div>
+                <fieldset class="routine-days-fieldset">
+                  <legend>Dias em que a rotina será prevista *</legend>
+                  <div class="routine-days-grid">
+                    <label><input type="checkbox" name="routineDays" value="1" /><span>Seg</span></label>
+                    <label><input type="checkbox" name="routineDays" value="2" /><span>Ter</span></label>
+                    <label><input type="checkbox" name="routineDays" value="3" /><span>Qua</span></label>
+                    <label><input type="checkbox" name="routineDays" value="4" /><span>Qui</span></label>
+                    <label><input type="checkbox" name="routineDays" value="5" /><span>Sex</span></label>
+                    <label><input type="checkbox" name="routineDays" value="6" /><span>Sáb</span></label>
+                    <label><input type="checkbox" name="routineDays" value="0" /><span>Dom</span></label>
+                  </div>
+                </fieldset>
+                <label class="routine-active-toggle"><input id="routineActive" type="checkbox" checked /><span><strong>Rotina habilitada</strong><small>Ao desmarcar, informe a data final da vigência. O histórico anterior será preservado.</small></span></label>
+                <div id="routineEditorMeta" class="routine-editor-meta"></div>
+                <div id="routineEditorFeedback" class="admin-feedback"></div>
+                <div class="routine-editor-actions">
+                  <button id="saveRoutineButton" class="btn btn-primary" type="button">Salvar rotina</button>
+                  <button id="duplicateRoutineButton" class="btn btn-secondary hidden" type="button">Duplicar</button>
+                  <button id="deactivateRoutineButton" class="btn btn-secondary hidden" type="button">Desativar</button>
+                  <button id="deleteRoutineButton" class="btn btn-danger hidden" type="button">Excluir</button>
+                  <button id="cancelRoutineButton" class="btn btn-secondary" type="button">Cancelar</button>
+                </div>
+              </article>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="vinculos">
+              <div class="admin-grid two-cols">
+                <div class="admin-block"><span class="eyebrow">Equipe</span><h3>Vincular loja ao formador</h3><div class="stack-fields"><label class="field"><span>Loja</span><select id="adminLojaSelect"></select></label><label class="field"><span>Formador</span><select id="adminFormadorSelect"></select></label><button id="saveLojaVinculo" class="btn btn-primary" type="button">Salvar vínculo</button></div><div id="linkFeedback" class="admin-feedback"></div></div>
+                <div class="admin-block"><span class="eyebrow">Vínculos atuais</span><h3>Responsáveis por unidade</h3><div id="vinculosLista" class="admin-scroll-list"></div></div>
+              </div>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="nomes">
+              <div class="admin-grid two-cols">
+                <div class="admin-block"><span class="eyebrow">Padronização</span><h3>Alterar nome de loja</h3><div class="stack-fields"><label class="field"><span>Loja atual</span><select id="renameLojaSelect"></select></label><label class="field"><span>Novo nome</span><input id="renameLojaInput" type="text" placeholder="Digite o novo nome" /></label><button id="saveLojaRename" class="btn btn-primary" type="button">Salvar novo nome</button></div><div id="renameFeedback" class="admin-feedback"></div></div>
+                <div class="admin-block"><span class="eyebrow">Nomes cadastrados</span><h3>Personalizações</h3><div id="renamesLista" class="admin-scroll-list"></div></div>
+              </div>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="historico">
+              <article class="admin-block history-block"><div class="section-head compact-head"><div><span class="eyebrow">Histórico</span><h3>Importações processadas</h3><p class="admin-summary">Consulte, reprocese ou remova datas já importadas.</p></div></div><div id="historicoPlanilhas" class="history-stack"></div></article>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="configuracoes">
+              <div class="admin-grid two-cols">
+                <article class="admin-block"><span class="eyebrow">Armazenamento</span><h3>Política de dados</h3><div class="admin-settings-list"><div><strong>Dados brutos</strong><span>Excluídos automaticamente após 5 dias.</span></div><div><strong>Detalhes recentes</strong><span>Até 45 dias carregados na abertura.</span></div><div><strong>Resumos históricos</strong><span>Até 370 dias mantidos para consultas leves.</span></div></div></article>
+                <article class="admin-block admin-danger-zone"><span class="eyebrow">Ação crítica</span><h3>Limpar dados do painel</h3><p class="admin-summary">Remove todas as importações e resultados armazenados. As configurações de lojas, regionais e rotinas são preservadas.</p><button id="resetData" class="btn btn-danger" type="button">Limpar painel</button></article>
+              </div>
+            </section>
+          </div>
+        </main>
       </div>
-    </div>
+    </section>
   </div>
-
 
   <div id="presentationModal" class="presentation-modal hidden" aria-hidden="true">
     <div class="presentation-overlay" onclick="window.PainelSF && window.PainelSF.fecharApresentacao()"></div>
@@ -562,7 +636,7 @@
   <div id="importBadge" class="hidden"></div>
   <table class="hidden"><tbody id="tabelaResumoPromotores"></tbody></table>
 
-  <script src="script.js" defer></script>
+  <script src="script.js?v=20260728-rotinas-dinamicas-v8" defer></script>
 
 
 <script>
@@ -571,8 +645,8 @@ window.PainelSF = window.PainelSF || {
     const abrir = typeof force === 'boolean' ? force : !document.body.classList.contains('sidebar-open');
     document.body.classList.toggle('sidebar-open', abrir);
   },
-  abrirAdminModal(){ const m=document.getElementById('adminModal'); if(m){ m.classList.remove('hidden'); m.setAttribute('aria-hidden','false'); } },
-  fecharAdminModal(){ const m=document.getElementById('adminModal'); if(m){ m.classList.add('hidden'); m.setAttribute('aria-hidden','true'); } },
+  abrirAdminModal(){ const m=document.getElementById('adminModal'); if(m){ m.classList.remove('hidden'); m.setAttribute('aria-hidden','false'); document.body.classList.add('admin-mode'); } },
+  fecharAdminModal(){ const m=document.getElementById('adminModal'); if(m){ m.classList.add('hidden'); m.setAttribute('aria-hidden','true'); document.body.classList.remove('admin-mode'); } },
   aplicarPeriodoResumo(periodo){
     document.querySelectorAll('.summary-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.period===periodo));
     const di=document.getElementById('filterDataInicial'); const df=document.getElementById('filterDataFinal');
