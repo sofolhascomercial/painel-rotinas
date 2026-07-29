@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=20260729-curva-execucao-v10" />
 </head>
 <body>
   <div class="app-shell">
@@ -204,6 +204,46 @@
           <p>Total de rotinas não concluídas</p>
           <div class="hero-alert-list" id="painelPendencias"></div>
         </article>
+      </section>
+
+      <section class="panel execution-curve-panel" id="executionCurvePanel" aria-labelledby="executionCurveTitle">
+        <div class="execution-curve-head">
+          <div>
+            <span class="eyebrow">Histórico comparativo</span>
+            <h2 id="executionCurveTitle">Curva de execução</h2>
+            <p id="executionCurveSubtitle" class="execution-curve-subtitle">Evolução percentual das rotinas realizadas.</p>
+          </div>
+          <div class="execution-curve-periods" id="executionCurvePeriods" aria-label="Período da curva de execução">
+            <button type="button" data-curve-period="7d">7 dias</button>
+            <button type="button" data-curve-period="15d">15 dias</button>
+            <button type="button" data-curve-period="30d" class="active">30 dias</button>
+            <button type="button" data-curve-period="60d">60 dias</button>
+            <button type="button" data-curve-period="3m">3 meses</button>
+            <button type="button" data-curve-period="6m">6 meses</button>
+            <button type="button" data-curve-period="1a">1 ano</button>
+          </div>
+        </div>
+
+        <div class="execution-curve-stats" id="executionCurveStats">
+          <article><span>Média do período</span><strong id="curveAverage">--</strong><small id="curveAverageDetail">Sem dados</small></article>
+          <article><span>Melhor resultado</span><strong id="curveBest">--</strong><small id="curveBestDetail">Sem dados</small></article>
+          <article><span>Menor resultado</span><strong id="curveWorst">--</strong><small id="curveWorstDetail">Sem dados</small></article>
+          <article><span>Variação</span><strong id="curveVariation">--</strong><small id="curveVariationDetail">Período anterior</small></article>
+        </div>
+
+        <div class="execution-curve-legend" aria-label="Legenda do gráfico">
+          <span><i class="legend-line current"></i> Período atual</span>
+          <span id="curvePreviousLegend"><i class="legend-line previous"></i> Período anterior</span>
+          <span class="curve-coverage" id="curveCoverage"></span>
+        </div>
+
+        <div class="execution-curve-chart-shell" id="executionCurveChartShell">
+          <div class="execution-curve-scroll" id="executionCurveScroll">
+            <div class="execution-curve-chart" id="executionCurveChart" role="img" aria-label="Gráfico comparativo da execução das rotinas"></div>
+          </div>
+          <div class="execution-curve-tooltip hidden" id="executionCurveTooltip"></div>
+        </div>
+        <div class="execution-curve-empty hidden" id="executionCurveEmpty">Importe resultados para visualizar a curva de execução.</div>
       </section>
 
       <section class="content-grid top-grid">
@@ -636,7 +676,7 @@
   <div id="importBadge" class="hidden"></div>
   <table class="hidden"><tbody id="tabelaResumoPromotores"></tbody></table>
 
-  <script src="script.js?v=20260728-rotinas-dinamicas-v8" defer></script>
+  <script src="script.js?v=20260729-curva-execucao-v10" defer></script>
 
 
 <script>

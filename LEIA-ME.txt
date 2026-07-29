@@ -1,24 +1,40 @@
-PAINEL DE ROTINAS SÓ FOLHAS — ROTINAS DINÂMICAS
+PAINEL DE ROTINAS SÓ FOLHAS — CURVA DE EXECUÇÃO COMPARATIVA
+Versão: 29/07/2026
 
-Arquivos de produção:
-- index.html
-- script.js
-- style.css
-- leaf-logo.png
-- logo-sofolhas.png
+ALTERAÇÃO PRINCIPAL
+Foi acrescentado ao dashboard o painel “Curva de execução”, logo abaixo dos indicadores principais.
 
-Para atualizar:
-1. Substitua todos os arquivos atuais pelos arquivos desta pasta.
-2. Mantenha os cinco arquivos juntos na mesma pasta.
-3. Abra o sistema e pressione Ctrl + F5.
+PERÍODOS DISPONÍVEIS
+- 7 dias
+- 15 dias
+- 30 dias
+- 60 dias
+- 3 meses
+- 6 meses
+- 1 ano
 
-Na área ADM > Rotinas agora é possível:
-- criar nova rotina;
-- editar e renomear;
-- configurar nome do checklist Moki e aliases;
-- definir dias, aplicação, horários e tolerâncias;
-- definir início e fim de vigência;
-- duplicar e desativar;
-- excluir somente rotinas personalizadas sem histórico.
+COMPARAÇÃO
+- Linha verde: período atual.
+- Linha tracejada: período anterior equivalente.
+- Variação em pontos percentuais.
+- Média ponderada do período.
+- Melhor e menor resultado.
+- Tooltip com previstas, realizadas, pendentes, no prazo e em atraso.
 
-Os nomes antigos são preservados como aliases quando uma rotina é renomeada.
+AGRUPAMENTO
+- 7, 15, 30 e 60 dias: um ponto por dia.
+- 3 e 6 meses: agrupamento semanal.
+- 1 ano: agrupamento mensal.
+
+INTEGRAÇÃO
+- O gráfico usa os resumos diários leves já gravados pelo sistema.
+- Respeita a data final selecionada nos filtros como referência.
+- Respeita as abas Visão Geral, Regional DF/GO e Regional Goiânia – Lojas Fora.
+- Não baixa novamente as linhas brutas das planilhas.
+- O limite de resumos leves foi ampliado para 740 dias para permitir a comparação de 1 ano com o ano anterior.
+
+INSTALAÇÃO
+Substitua todos os arquivos do sistema pelos arquivos desta pasta e abra a página com Ctrl + F5.
+
+OBSERVAÇÃO
+Nenhuma coleção nova do Firebase foi criada. As importações, histórico agrupado, exclusão por planilha, proteção de competência, regionais, rotinas dinâmicas, ADM e apresentação foram mantidos.

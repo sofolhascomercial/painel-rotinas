@@ -26,6 +26,7 @@ let firebaseSnapshotsRecebidos = false;
 let firebaseResumosRecebidos = false;
 let aplicarEstadoRemotoTimer = null;
 let resumoPeriodoAtual = 'diario';
+let curvaPeriodoAtual = '30d';
 
 const APRESENTACAO_CONFIG = {
   intervaloMs: 10000
@@ -60,14 +61,30 @@ const ADMIN_CREDENTIALS = {
 
 const FORMADORES_ATIVOS = ['Luciano', 'Karina', 'Luana'];
 const FORMADORES_ATIVOS_SLUG = new Set(FORMADORES_ATIVOS.map((item) => slug(item)));
-const APP_STORAGE_VERSION = '2026-07-28-rotinas-dinamicas-v8';
-const RESULT_SCHEMA_VERSION = 4;
+const APP_STORAGE_VERSION = '2026-07-28-importacao-segura-historico-v9';
+const RESULT_SCHEMA_VERSION = 5;
 
 const PRAZO_DADOS_BRUTOS_DIAS = 5;
 const INTERVALO_LIMPEZA_DADOS_BRUTOS_MS = 60 * 60 * 1000;
 const LIMITE_DIAS_DETALHES_INICIAIS = 45;
-const LIMITE_RESUMOS_HISTORICOS = 370;
+const LIMITE_RESUMOS_HISTORICOS = 740;
 const LIMITE_DIAS_CONSULTA_DETALHADA = 90;
+const JANELA_AGRUPAMENTO_IMPORTACAO_LEGADA_MS = 5 * 60 * 1000;
+
+const MESES_ARQUIVO = [
+  { numero: '01', nomes: ['janeiro', 'jan'] },
+  { numero: '02', nomes: ['fevereiro', 'fev'] },
+  { numero: '03', nomes: ['marco', 'mar'] },
+  { numero: '04', nomes: ['abril', 'abr'] },
+  { numero: '05', nomes: ['maio', 'mai'] },
+  { numero: '06', nomes: ['junho', 'jun'] },
+  { numero: '07', nomes: ['julho', 'jul'] },
+  { numero: '08', nomes: ['agosto', 'ago'] },
+  { numero: '09', nomes: ['setembro', 'set'] },
+  { numero: '10', nomes: ['outubro', 'out'] },
+  { numero: '11', nomes: ['novembro', 'nov'] },
+  { numero: '12', nomes: ['dezembro', 'dez'] }
+];
 
 const ROTINAS_PADRAO = [
   { id: 'rotina-01', nome: '01º Promotor - Fotos abertura do dia Até 6h30', nomeMoki: '01º Promotor - Fotos abertura do dia Até 6h30', horarioInicio: '', horarioFim: '06:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
@@ -78,7 +95,7 @@ const ROTINAS_PADRAO = [
   { id: 'rotina-06', nome: '06º Promotor - Reabastecimento 9:30hrs', nomeMoki: '06º Promotor - Reabastecimento 9:30hrs', horarioInicio: '', horarioFim: '09:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
   { id: 'rotina-07', nome: '07º Promotor - Reabastecimento 10:30hrs', nomeMoki: '07º Promotor - Reabastecimento 10:30hrs', horarioInicio: '', horarioFim: '10:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
   { id: 'rotina-08', nome: '08º Promotor- Triagem de Produtos', nomeMoki: '08º Promotor- Triagem de Produtos', horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
-  { id: 'rotina-09', nome: '09ºPromotor - Relatório Fotográfico Até 11:30hrs', nomeMoki: '09ºPromotor - Relatório Fotográfico Até 11:30hrs', horarioInicio: '', horarioFim: '11:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-09', nome: '09ºPromotor - Relatório Fotográfico Até 11:30hrs', nomeMoki: '09ºPromotor - Relatório Fotográfico Até 11:30hrs', aliases: ['09ºPromotor - Relatório Fotográfico Até 11hrs', 'Relatório Fotográfico Até 11hrs'], horarioInicio: '', horarioFim: '11:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
   { id: 'rotina-10', nome: '10° Inventário de saída  até 11:30', nomeMoki: '10° Inventário de saída  até 11:30', horarioInicio: '', horarioFim: '11:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
   { id: 'rotina-11', nome: '11º Promotor - Banca de Saída 11:45hrs', nomeMoki: '11º Promotor - Banca de Saída 11:45hrs', horarioInicio: '', horarioFim: '11:45', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
   { id: 'rotina-12', nome: '12º Promotor- Notas fiscais E Quebras', nomeMoki: '12º Promotor- Notas fiscais E Quebras', horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
@@ -478,7 +495,7 @@ function salvarStore(chave, valor) {
 }
 
 function normalizarResumoDiario(item = {}) {
-  const data = formatarData(item.data || item.latestDate);
+  const data = formatarData(item.latestDate || (typeof item.data === 'string' ? item.data : ''));
   if (!data) return null;
   return {
     id: item.id || `rotinas-${data}`,
@@ -495,6 +512,14 @@ function normalizarResumoDiario(item = {}) {
     chunksCount: Number(item.chunksCount || 0),
     rawChunksCount: Number(item.rawChunksCount || 0),
     dataKind: item.dataKind || 'responses',
+    importBatchId: String(item.importBatchId || ''),
+    importBatchImportedAt: valorDataParaIso(item.importBatchImportedAt, valorDataParaIso(item.importedAt, '')),
+    sourceCompetence: String(item.sourceCompetence || ''),
+    sourceCompetenceOrigin: String(item.sourceCompetenceOrigin || ''),
+    sourceFileRows: Number(item.sourceFileRows || 0),
+    sourceRecognizedRows: Number(item.sourceRecognizedRows || 0),
+    sourceOutsideCompetenceCount: Number(item.sourceOutsideCompetenceCount || 0),
+    sourceDatesCount: Number(item.sourceDatesCount || 0),
     schemaVersion: Number(item.schemaVersion || RESULT_SCHEMA_VERSION)
   };
 }
@@ -547,6 +572,14 @@ function persistirSnapshotsLocais() {
       chunksCount: item.chunksCount || 0,
       rawChunksCount: item.rawChunksCount || 0,
       dataKind: item.dataKind || (Number(item.schemaVersion || 0) >= RESULT_SCHEMA_VERSION ? 'responses' : 'results'),
+      importBatchId: item.importBatchId || '',
+      importBatchImportedAt: item.importBatchImportedAt || item.importedAt || '',
+      sourceCompetence: item.sourceCompetence || '',
+      sourceCompetenceOrigin: item.sourceCompetenceOrigin || '',
+      sourceFileRows: item.sourceFileRows || 0,
+      sourceRecognizedRows: item.sourceRecognizedRows || 0,
+      sourceOutsideCompetenceCount: item.sourceOutsideCompetenceCount || 0,
+      sourceDatesCount: item.sourceDatesCount || 0,
       schemaVersion: item.schemaVersion || (Array.isArray(item.data) && item.data.length ? 1 : 2),
       dataLoaded: manterDadosLocais,
       data: manterDadosLocais ? item.data : undefined
@@ -733,6 +766,50 @@ async function salvarSnapshotNoFirebase(snapshot) {
   } catch (error) {
     console.error('Erro ao salvar snapshot no Firebase:', error);
     return false;
+  }
+}
+
+async function verificarSnapshotNoFirebase(snapshot) {
+  if (!firebaseDisponivel || !firebaseApi || !db) return true;
+  try {
+    const docSnap = await firebaseApi.getDoc(firebaseApi.doc(db, 'painel_snapshots', snapshot.id));
+    if (!docSnap.exists()) return false;
+    const meta = normalizarSnapshotFirebase({ id: docSnap.id, ...docSnap.data() });
+    if (Number(meta.responsesCount || 0) !== Number(snapshot.responsesCount || 0)) return false;
+    if (Number(meta.total || 0) !== Number(snapshot.total || 0)) return false;
+    if (String(meta.latestDate || '') !== String(snapshot.latestDate || '')) return false;
+    if (snapshot.importBatchId && String(meta.importBatchId || '') !== String(snapshot.importBatchId)) return false;
+    const dados = await carregarDadosSnapshotNoFirebase(meta);
+    return dados.length === (Array.isArray(snapshot.data) ? snapshot.data.length : 0);
+  } catch (error) {
+    console.error(`Erro ao verificar snapshot ${snapshot?.id || ''}:`, error);
+    return false;
+  }
+}
+
+async function salvarSnapshotNoFirebaseVerificado(snapshot, tentativas = 2) {
+  if (!firebaseDisponivel) return true;
+  for (let tentativa = 1; tentativa <= tentativas; tentativa += 1) {
+    const salvo = await salvarSnapshotNoFirebase(snapshot);
+    if (salvo && await verificarSnapshotNoFirebase(snapshot)) return true;
+    if (tentativa < tentativas) await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+  return false;
+}
+
+async function carregarSnapshotCompletoPorId(snapshotId) {
+  let snapshot = snapshotsImportados.find((item) => item.id === snapshotId)
+    || obterHistoricoLeve().find((item) => item.id === snapshotId);
+  if (snapshot && Array.isArray(snapshot.data) && snapshot.data.length) return snapshot;
+  if (!firebaseDisponivel || !firebaseApi || !db) return snapshot || null;
+  try {
+    const docSnap = await firebaseApi.getDoc(firebaseApi.doc(db, 'painel_snapshots', snapshotId));
+    if (!docSnap.exists()) return null;
+    const meta = normalizarSnapshotFirebase({ id: docSnap.id, ...docSnap.data() });
+    return { ...meta, data: await carregarDadosSnapshotNoFirebase(meta), dataLoaded: true };
+  } catch (error) {
+    console.error(`Erro ao carregar snapshot completo ${snapshotId}:`, error);
+    return null;
   }
 }
 
@@ -2120,6 +2197,386 @@ function configurarAbasRegionaisDashboard() {
   atualizarAbasRegionaisDashboard();
 }
 
+
+const CURVA_PERIODOS = {
+  '7d': { label: '7 dias', dias: 7, agrupamento: 'dia' },
+  '15d': { label: '15 dias', dias: 15, agrupamento: 'dia' },
+  '30d': { label: '30 dias', dias: 30, agrupamento: 'dia' },
+  '60d': { label: '60 dias', dias: 60, agrupamento: 'dia' },
+  '3m': { label: '3 meses', meses: 3, agrupamento: 'semana' },
+  '6m': { label: '6 meses', meses: 6, agrupamento: 'semana' },
+  '1a': { label: '1 ano', meses: 12, agrupamento: 'mes' }
+};
+
+function dataIsoLocal(data) {
+  return dataIsoParaDate(formatarData(data));
+}
+
+function dataLocalParaIso(data) {
+  if (!(data instanceof Date) || Number.isNaN(data.getTime())) return '';
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
+}
+
+function somarDiasIso(dataIso, dias) {
+  const data = dataIsoLocal(dataIso);
+  if (!data) return '';
+  data.setDate(data.getDate() + Number(dias || 0));
+  return dataLocalParaIso(data);
+}
+
+function diferencaDiasInclusiva(inicioIso, fimIso) {
+  const inicio = dataIsoLocal(inicioIso);
+  const fim = dataIsoLocal(fimIso);
+  if (!inicio || !fim) return 0;
+  return Math.max(0, Math.round((fim - inicio) / 86400000) + 1);
+}
+
+function obterDataAncoraCurva() {
+  const datasResumo = resumosDiarios.map((item) => formatarData(item.latestDate)).filter(Boolean).sort();
+  return formatarData(filtros.dataFinal?.value)
+    || formatarData(filtros.dataInicial?.value)
+    || datasResumo.at(-1)
+    || ultimaDataDisponivel
+    || new Date().toISOString().slice(0, 10);
+}
+
+function obterIntervalosCurva(periodoId = curvaPeriodoAtual) {
+  const config = CURVA_PERIODOS[periodoId] || CURVA_PERIODOS['30d'];
+  const fimAtual = obterDataAncoraCurva();
+  const fimDate = dataIsoLocal(fimAtual) || new Date();
+  let inicioAtual = fimAtual;
+
+  if (config.dias) {
+    inicioAtual = somarDiasIso(fimAtual, -(config.dias - 1));
+  } else if (config.meses === 12) {
+    const inicio = new Date(fimDate.getFullYear(), fimDate.getMonth() - 11, 1);
+    inicioAtual = dataLocalParaIso(inicio);
+  } else {
+    const inicio = new Date(fimDate.getFullYear(), fimDate.getMonth() - (config.meses - 1), 1);
+    inicioAtual = dataLocalParaIso(inicio);
+  }
+
+  const duracao = diferencaDiasInclusiva(inicioAtual, fimAtual);
+  const fimAnterior = somarDiasIso(inicioAtual, -1);
+  const inicioAnterior = somarDiasIso(fimAnterior, -(duracao - 1));
+  return { config, inicioAtual, fimAtual, inicioAnterior, fimAnterior, duracao };
+}
+
+function criarBucketsCurva(inicioIso, fimIso, agrupamento = 'dia') {
+  const buckets = [];
+  let cursor = dataIsoLocal(inicioIso);
+  const fim = dataIsoLocal(fimIso);
+  if (!cursor || !fim) return buckets;
+
+  while (cursor <= fim) {
+    const bucketInicio = new Date(cursor);
+    let bucketFim = new Date(cursor);
+    if (agrupamento === 'semana') {
+      bucketFim.setDate(bucketFim.getDate() + 6);
+    } else if (agrupamento === 'mes') {
+      bucketFim = new Date(bucketFim.getFullYear(), bucketFim.getMonth() + 1, 0);
+    }
+    if (bucketFim > fim) bucketFim = new Date(fim);
+    buckets.push({ inicio: dataLocalParaIso(bucketInicio), fim: dataLocalParaIso(bucketFim) });
+    cursor = new Date(bucketFim);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return buckets;
+}
+
+function resumoCurvaRegional(resumo) {
+  const base = resumo?.summary || {};
+  if (regionalSelecionada === 'geral') return base;
+  return base.regionais?.[regionalSelecionada] || null;
+}
+
+function mapaResumosCurva() {
+  const mapa = new Map();
+  resumosDiarios.map(normalizarResumoDiario).filter(Boolean).forEach((resumo) => {
+    mapa.set(resumo.latestDate, resumo);
+  });
+  return mapa;
+}
+
+function agregarBucketCurva(bucket, mapa) {
+  let previstas = 0;
+  let realizadas = 0;
+  let pendentes = 0;
+  let noPrazo = 0;
+  let atrasadas = 0;
+  let diasComDados = 0;
+  const totalDias = diferencaDiasInclusiva(bucket.inicio, bucket.fim);
+  let data = bucket.inicio;
+
+  while (data && data <= bucket.fim) {
+    const resumo = mapa.get(data);
+    const grupo = resumoCurvaRegional(resumo);
+    if (grupo && Number(grupo.previstas || 0) > 0) {
+      previstas += Number(grupo.previstas || 0);
+      realizadas += Number(grupo.realizadas || 0);
+      pendentes += Number(grupo.pendentes || 0);
+      noPrazo += Number(grupo.noPrazo || 0);
+      atrasadas += Number(grupo.atrasadas || 0);
+      diasComDados += 1;
+    }
+    data = somarDiasIso(data, 1);
+  }
+
+  return {
+    ...bucket,
+    previstas,
+    realizadas,
+    pendentes,
+    noPrazo,
+    atrasadas,
+    diasComDados,
+    totalDias,
+    execucao: previstas ? (realizadas / previstas) * 100 : null
+  };
+}
+
+function formatarRotuloCurva(bucket, agrupamento = 'dia', compacto = false) {
+  const inicio = dataIsoLocal(bucket.inicio);
+  const fim = dataIsoLocal(bucket.fim);
+  if (!inicio || !fim) return '';
+  if (agrupamento === 'dia') {
+    return inicio.toLocaleDateString('pt-BR', compacto
+      ? { day: '2-digit', month: '2-digit' }
+      : { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  if (agrupamento === 'mes') {
+    return inicio.toLocaleDateString('pt-BR', { month: compacto ? 'short' : 'long', year: 'numeric' });
+  }
+  const mesmoMes = inicio.getMonth() === fim.getMonth() && inicio.getFullYear() === fim.getFullYear();
+  if (mesmoMes) return `${inicio.getDate()}–${fim.getDate()} ${fim.toLocaleDateString('pt-BR', { month: 'short' })}`;
+  return `${inicio.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}–${fim.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`;
+}
+
+function obterSeriesCurva() {
+  const intervalos = obterIntervalosCurva();
+  const mapa = mapaResumosCurva();
+  const bucketsAtuais = criarBucketsCurva(intervalos.inicioAtual, intervalos.fimAtual, intervalos.config.agrupamento);
+  const bucketsAnteriores = criarBucketsCurva(intervalos.inicioAnterior, intervalos.fimAnterior, intervalos.config.agrupamento);
+  const atual = bucketsAtuais.map((bucket) => agregarBucketCurva(bucket, mapa));
+  const anterior = bucketsAnteriores.map((bucket) => agregarBucketCurva(bucket, mapa));
+  const tamanho = Math.max(atual.length, anterior.length);
+  const pontos = Array.from({ length: tamanho }, (_, index) => ({
+    index,
+    atual: atual[index] || null,
+    anterior: anterior[index] || null,
+    label: atual[index] ? formatarRotuloCurva(atual[index], intervalos.config.agrupamento, true) : `${index + 1}`
+  }));
+  return { ...intervalos, atual, anterior, pontos };
+}
+
+function resumirSerieCurva(serie = []) {
+  const validos = serie.filter((item) => item && item.previstas > 0 && item.execucao !== null);
+  const previstas = validos.reduce((soma, item) => soma + item.previstas, 0);
+  const realizadas = validos.reduce((soma, item) => soma + item.realizadas, 0);
+  const diasComDados = validos.reduce((soma, item) => soma + item.diasComDados, 0);
+  const melhor = validos.reduce((acc, item) => !acc || item.execucao > acc.execucao ? item : acc, null);
+  const pior = validos.reduce((acc, item) => !acc || item.execucao < acc.execucao ? item : acc, null);
+  return {
+    validos,
+    previstas,
+    realizadas,
+    diasComDados,
+    execucao: previstas ? (realizadas / previstas) * 100 : null,
+    melhor,
+    pior
+  };
+}
+
+function formatarPctCurva(valor) {
+  return Number.isFinite(valor) ? `${Math.round(valor)}%` : '--';
+}
+
+function montarCaminhoCurva(valores, x, y) {
+  let caminho = '';
+  let aberto = false;
+  valores.forEach((valor, index) => {
+    if (!Number.isFinite(valor)) {
+      aberto = false;
+      return;
+    }
+    caminho += `${aberto ? ' L' : ' M'} ${x(index).toFixed(2)} ${y(valor).toFixed(2)}`;
+    aberto = true;
+  });
+  return caminho.trim();
+}
+
+function renderizarSvgCurva(series) {
+  const container = document.getElementById('executionCurveChart');
+  if (!container) return;
+  const pontos = series.pontos;
+  const largura = Math.max(820, pontos.length * (pontos.length > 40 ? 30 : 48));
+  const altura = 330;
+  const margem = { topo: 24, direita: 30, baixo: 58, esquerda: 54 };
+  const larguraPlot = largura - margem.esquerda - margem.direita;
+  const alturaPlot = altura - margem.topo - margem.baixo;
+  const x = (index) => margem.esquerda + (pontos.length <= 1 ? larguraPlot / 2 : (index / (pontos.length - 1)) * larguraPlot);
+  const y = (valor) => margem.topo + alturaPlot - (Math.max(0, Math.min(100, valor)) / 100) * alturaPlot;
+  const atualValores = pontos.map((ponto) => ponto.atual?.execucao ?? null);
+  const anteriorValores = pontos.map((ponto) => ponto.anterior?.execucao ?? null);
+  const caminhoAtual = montarCaminhoCurva(atualValores, x, y);
+  const caminhoAnterior = montarCaminhoCurva(anteriorValores, x, y);
+  const passoLabel = Math.max(1, Math.ceil(pontos.length / 9));
+  const grades = [0, 25, 50, 75, 100];
+
+  const linhasGrade = grades.map((valor) => `
+    <line class="curve-grid-line" x1="${margem.esquerda}" y1="${y(valor)}" x2="${largura - margem.direita}" y2="${y(valor)}"></line>
+    <text class="curve-axis-y" x="${margem.esquerda - 12}" y="${y(valor) + 4}" text-anchor="end">${valor}%</text>`).join('');
+
+  const labelsX = pontos.map((ponto, index) => {
+    if (index % passoLabel !== 0 && index !== pontos.length - 1) return '';
+    return `<text class="curve-axis-x" x="${x(index)}" y="${altura - 20}" text-anchor="middle">${escaparHtml(ponto.label)}</text>`;
+  }).join('');
+
+  const pontosAtuais = pontos.map((ponto, index) => {
+    if (!Number.isFinite(ponto.atual?.execucao)) return '';
+    return `<circle class="curve-point current" cx="${x(index)}" cy="${y(ponto.atual.execucao)}" r="4.5" data-curve-index="${index}"></circle>`;
+  }).join('');
+
+  const zonasHit = pontos.map((ponto, index) => {
+    const larguraHit = pontos.length <= 1 ? larguraPlot : Math.max(18, larguraPlot / Math.max(1, pontos.length - 1));
+    return `<rect class="curve-hit-zone" x="${x(index) - larguraHit / 2}" y="${margem.topo}" width="${larguraHit}" height="${alturaPlot}" data-curve-index="${index}"></rect>`;
+  }).join('');
+
+  container.innerHTML = `
+    <svg class="execution-curve-svg" viewBox="0 0 ${largura} ${altura}" width="${largura}" height="${altura}" aria-hidden="true">
+      <defs>
+        <filter id="curveGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="4" result="blur"></feGaussianBlur><feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter>
+      </defs>
+      ${linhasGrade}
+      ${caminhoAnterior ? `<path class="curve-path previous" d="${caminhoAnterior}"></path>` : ''}
+      ${caminhoAtual ? `<path class="curve-path current" d="${caminhoAtual}" filter="url(#curveGlow)"></path>` : ''}
+      ${pontosAtuais}
+      ${labelsX}
+      ${zonasHit}
+    </svg>`;
+
+  container.querySelectorAll('[data-curve-index]').forEach((elemento) => {
+    elemento.addEventListener('mouseenter', (event) => mostrarTooltipCurva(event, series, Number(elemento.dataset.curveIndex)));
+    elemento.addEventListener('mousemove', (event) => posicionarTooltipCurva(event));
+    elemento.addEventListener('mouseleave', ocultarTooltipCurva);
+    elemento.addEventListener('click', (event) => mostrarTooltipCurva(event, series, Number(elemento.dataset.curveIndex)));
+  });
+}
+
+function montarDetalheTooltipCurva(titulo, item, agrupamento) {
+  if (!item || item.previstas <= 0) return `<div class="curve-tooltip-period"><strong>${escaparHtml(titulo)}</strong><span>Sem dados no período</span></div>`;
+  const rotulo = formatarRotuloCurva(item, agrupamento, false);
+  return `<div class="curve-tooltip-period">
+    <strong>${escaparHtml(titulo)}</strong><span>${escaparHtml(rotulo)}</span>
+    <dl><div><dt>Execução</dt><dd>${formatarPctCurva(item.execucao)}</dd></div><div><dt>Previstas</dt><dd>${formatarNumero.format(item.previstas)}</dd></div><div><dt>Realizadas</dt><dd>${formatarNumero.format(item.realizadas)}</dd></div><div><dt>Pendentes</dt><dd>${formatarNumero.format(item.pendentes)}</dd></div><div><dt>No prazo</dt><dd>${formatarNumero.format(item.noPrazo)}</dd></div><div><dt>Em atraso</dt><dd>${formatarNumero.format(item.atrasadas)}</dd></div></dl>
+  </div>`;
+}
+
+function mostrarTooltipCurva(event, series, index) {
+  const tooltip = document.getElementById('executionCurveTooltip');
+  const ponto = series.pontos[index];
+  if (!tooltip || !ponto) return;
+  tooltip.innerHTML = `${montarDetalheTooltipCurva('Período atual', ponto.atual, series.config.agrupamento)}${montarDetalheTooltipCurva('Período anterior', ponto.anterior, series.config.agrupamento)}`;
+  tooltip.classList.remove('hidden');
+  posicionarTooltipCurva(event);
+}
+
+function posicionarTooltipCurva(event) {
+  const tooltip = document.getElementById('executionCurveTooltip');
+  const shell = document.getElementById('executionCurveChartShell');
+  if (!tooltip || !shell || tooltip.classList.contains('hidden')) return;
+  const rect = shell.getBoundingClientRect();
+  const largura = tooltip.offsetWidth || 280;
+  const altura = tooltip.offsetHeight || 220;
+  let left = event.clientX - rect.left + 14;
+  let top = event.clientY - rect.top - altura / 2;
+  if (left + largura > rect.width - 8) left = event.clientX - rect.left - largura - 14;
+  top = Math.max(8, Math.min(top, rect.height - altura - 8));
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function ocultarTooltipCurva() {
+  document.getElementById('executionCurveTooltip')?.classList.add('hidden');
+}
+
+function renderizarResumoCurva(series) {
+  const atual = resumirSerieCurva(series.atual);
+  const anterior = resumirSerieCurva(series.anterior);
+  const mediaEl = document.getElementById('curveAverage');
+  const mediaDetail = document.getElementById('curveAverageDetail');
+  const bestEl = document.getElementById('curveBest');
+  const bestDetail = document.getElementById('curveBestDetail');
+  const worstEl = document.getElementById('curveWorst');
+  const worstDetail = document.getElementById('curveWorstDetail');
+  const variationEl = document.getElementById('curveVariation');
+  const variationDetail = document.getElementById('curveVariationDetail');
+  const previousLegend = document.getElementById('curvePreviousLegend');
+  const coverage = document.getElementById('curveCoverage');
+  const subtitle = document.getElementById('executionCurveSubtitle');
+
+  if (mediaEl) mediaEl.textContent = formatarPctCurva(atual.execucao);
+  if (mediaDetail) mediaDetail.textContent = atual.previstas ? `${formatarNumero.format(atual.realizadas)} de ${formatarNumero.format(atual.previstas)} rotinas` : 'Sem dados';
+  if (bestEl) bestEl.textContent = formatarPctCurva(atual.melhor?.execucao);
+  if (bestDetail) bestDetail.textContent = atual.melhor ? formatarRotuloCurva(atual.melhor, series.config.agrupamento, false) : 'Sem dados';
+  if (worstEl) worstEl.textContent = formatarPctCurva(atual.pior?.execucao);
+  if (worstDetail) worstDetail.textContent = atual.pior ? formatarRotuloCurva(atual.pior, series.config.agrupamento, false) : 'Sem dados';
+
+  const temComparacao = Number.isFinite(atual.execucao) && Number.isFinite(anterior.execucao);
+  const variacao = temComparacao ? atual.execucao - anterior.execucao : null;
+  if (variationEl) {
+    variationEl.textContent = Number.isFinite(variacao) ? `${variacao >= 0 ? '+' : ''}${Math.round(variacao)} p.p.` : '--';
+    variationEl.classList.toggle('positive', Number.isFinite(variacao) && variacao >= 0);
+    variationEl.classList.toggle('negative', Number.isFinite(variacao) && variacao < 0);
+  }
+  if (variationDetail) variationDetail.textContent = temComparacao ? `Anterior: ${formatarPctCurva(anterior.execucao)}` : 'Período anterior indisponível';
+  if (previousLegend) previousLegend.classList.toggle('muted', !anterior.validos.length);
+
+  const regionalNome = regionalSelecionada === 'geral' ? 'Visão Geral' : (REGIONAIS_POR_ID.get(regionalSelecionada)?.nome || 'Regional');
+  if (subtitle) subtitle.textContent = `${series.config.label} até ${dataIsoLocal(series.fimAtual)?.toLocaleDateString('pt-BR')} • ${regionalNome}`;
+  if (coverage) coverage.textContent = `${atual.diasComDados} dia(s) com dados`;
+}
+
+function renderizarCurvaExecucao() {
+  const chart = document.getElementById('executionCurveChart');
+  const empty = document.getElementById('executionCurveEmpty');
+  const shell = document.getElementById('executionCurveChartShell');
+  if (!chart || !empty || !shell) return;
+  const series = obterSeriesCurva();
+  const atual = resumirSerieCurva(series.atual);
+  document.querySelectorAll('[data-curve-period]').forEach((button) => button.classList.toggle('active', button.dataset.curvePeriod === curvaPeriodoAtual));
+  renderizarResumoCurva(series);
+
+  const semDados = !atual.validos.length;
+  empty.classList.toggle('hidden', !semDados);
+  shell.classList.toggle('hidden', semDados);
+  if (semDados) {
+    chart.innerHTML = '';
+    ocultarTooltipCurva();
+    return;
+  }
+  renderizarSvgCurva(series);
+
+  requestAnimationFrame(() => {
+    const scroll = document.getElementById('executionCurveScroll');
+    if (scroll && scroll.scrollWidth > scroll.clientWidth) scroll.scrollLeft = scroll.scrollWidth;
+  });
+}
+
+function configurarCurvaExecucao() {
+  const container = document.getElementById('executionCurvePeriods');
+  if (!container || container.dataset.configured === '1') return;
+  container.dataset.configured = '1';
+  container.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-curve-period]');
+    if (!button || !CURVA_PERIODOS[button.dataset.curvePeriod]) return;
+    curvaPeriodoAtual = button.dataset.curvePeriod;
+    ocultarTooltipCurva();
+    renderizarCurvaExecucao();
+  });
+  document.getElementById('executionCurveChartShell')?.addEventListener('mouseleave', ocultarTooltipCurva);
+}
+
 function renderizarPainel() {
   dadosFiltrados = obterDadosFiltrados();
   atualizarKPIs(dadosFiltrados);
@@ -2131,6 +2588,7 @@ function renderizarPainel() {
   renderTabelaRotinas(dadosFiltrados);
   renderResumoLojas(dadosFiltrados);
   renderCalendarioExecucao(dadosFiltrados);
+  renderizarCurvaExecucao();
   renderizarApresentacaoSeAberta();
 }
 
@@ -2623,20 +3081,113 @@ function resumirResultadosImportacao(resultados = []) {
   return geral;
 }
 
-function processarPlanilhaMoki(sheets) {
-  const extracao = extrairRespostasMoki(sheets);
-  const datas = [...new Set(extracao.respostas.map((item) => item.data).filter(Boolean))].sort();
-  if (!datas.length) {
-    throw new Error('Nenhuma resposta corresponde às rotinas cadastradas no sistema.');
+function detectarMesNoNomeArquivo(fileName = '') {
+  const nome = slug(String(fileName || '').replace(/\.[^.]+$/, ''));
+  for (const mes of MESES_ARQUIVO) {
+    if (mes.nomes.some((item) => nome.split('-').includes(item) || nome.includes(`-${item}-`) || nome.endsWith(`-${item}`))) {
+      return mes.numero;
+    }
+  }
+  return '';
+}
+
+function formatarCompetencia(competencia = '') {
+  const match = String(competencia).match(/^(\d{4})-(\d{2})$/);
+  if (!match) return '';
+  const data = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+  return data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+}
+
+function detectarCompetenciaArquivo(fileName = '', respostas = []) {
+  const datas = respostas.map((item) => formatarData(item.data)).filter(Boolean);
+  if (!datas.length) return { competencia: '', origem: '', erro: '' };
+
+  const mesNome = detectarMesNoNomeArquivo(fileName);
+  if (mesNome) {
+    const anos = datas.reduce((acc, data) => {
+      if (data.slice(5, 7) !== mesNome) return acc;
+      const ano = data.slice(0, 4);
+      acc[ano] = (acc[ano] || 0) + 1;
+      return acc;
+    }, {});
+    const principal = Object.entries(anos).sort((a, b) => b[1] - a[1])[0];
+    if (!principal) {
+      const nomeMes = MESES_ARQUIVO.find((item) => item.numero === mesNome)?.nomes?.[0] || mesNome;
+      return {
+        competencia: '',
+        origem: 'nome-arquivo',
+        erro: `O nome do arquivo indica ${nomeMes}, mas nenhuma resposta válida desse mês foi encontrada.`
+      };
+    }
+    return { competencia: `${principal[0]}-${mesNome}`, origem: 'nome-arquivo', erro: '' };
   }
 
-  const respostasUnicas = mesclarRespostas(extracao.respostas);
-  const duplicadasRemovidas = Math.max(0, extracao.respostas.length - respostasUnicas.length);
+  const datasUnicas = new Set(datas);
+  if (datasUnicas.size < 8) return { competencia: '', origem: '', erro: '' };
+
+  const contagem = datas.reduce((acc, data) => {
+    const competencia = data.slice(0, 7);
+    acc[competencia] = (acc[competencia] || 0) + 1;
+    return acc;
+  }, {});
+  const principal = Object.entries(contagem).sort((a, b) => b[1] - a[1])[0];
+  const total = datas.length;
+  if (principal && total > 0 && principal[1] / total >= 0.80) {
+    return { competencia: principal[0], origem: 'conteudo-dominante', erro: '' };
+  }
+  return { competencia: '', origem: '', erro: '' };
+}
+
+function processarPlanilhaMoki(sheets, opcoes = {}) {
+  const extracaoOriginal = extrairRespostasMoki(sheets);
+  const competenciaInfo = detectarCompetenciaArquivo(opcoes.fileName || '', extracaoOriginal.respostas);
+  if (competenciaInfo.erro) throw new Error(competenciaInfo.erro);
+
+  let respostas = [...extracaoOriginal.respostas];
+  let rawData = [...extracaoOriginal.rawData];
+  const respostasForaCompetencia = [];
+  const rawDataForaCompetencia = [];
+
+  if (competenciaInfo.competencia) {
+    respostas = respostas.filter((item) => {
+      const dentro = String(item.data || '').startsWith(`${competenciaInfo.competencia}-`);
+      if (!dentro) respostasForaCompetencia.push(item);
+      return dentro;
+    });
+    rawData = rawData.filter((item) => {
+      const dentro = String(item.data || '').startsWith(`${competenciaInfo.competencia}-`);
+      if (!dentro) rawDataForaCompetencia.push(item);
+      return dentro;
+    });
+  }
+
+  if (!respostas.length) {
+    throw new Error(
+      competenciaInfo.competencia
+        ? `Nenhuma resposta válida pertence à competência ${formatarCompetencia(competenciaInfo.competencia)}.`
+        : 'Nenhuma resposta corresponde às rotinas cadastradas no sistema.'
+    );
+  }
+
+  const extracao = {
+    ...extracaoOriginal,
+    respostas,
+    rawData,
+    respostasForaCompetencia,
+    rawDataForaCompetencia,
+    competenciaArquivo: competenciaInfo.competencia,
+    competenciaOrigem: competenciaInfo.origem
+  };
+  const datas = [...new Set(respostas.map((item) => item.data).filter(Boolean))].sort();
+  if (!datas.length) throw new Error('Nenhuma data válida foi encontrada na competência da planilha.');
+
+  const respostasUnicas = mesclarRespostas(respostas);
+  const duplicadasRemovidas = Math.max(0, respostas.length - respostasUnicas.length);
   const resultados = [];
   const foraDaProgramacao = [];
 
   datas.forEach((data) => {
-    const gerado = gerarResultadosBaseParaData(data, extracao.respostas);
+    const gerado = gerarResultadosBaseParaData(data, respostas);
     resultados.push(...gerado.resultados);
     foraDaProgramacao.push(...gerado.foraDaProgramacao);
   });
@@ -2798,6 +3349,7 @@ async function parseXlsx(file) {
 }
 
 let previewsImportacao = [];
+let historicoPlanilhasAgrupadoAtual = new Map();
 
 function obterNomeAbaRotinas(sheets = {}) {
   return Object.keys(sheets).find((nome) => slug(nome).includes('rotina')) || Object.keys(sheets)[0] || '';
@@ -2860,6 +3412,8 @@ function renderizarPreviewImportacao() {
     if (item.processamento.datasDivergentes.length) avisos.push(`${item.processamento.datasDivergentes.length} resposta(s) com data de início divergente`);
     if (item.processamento.lojasNaoAtivas.length) avisos.push(`${item.processamento.lojasNaoAtivas.length} resposta(s) de loja não ativa`);
     if (item.processamento.datasForaPeriodo?.length) avisos.push(`${item.processamento.datasForaPeriodo.length} resposta(s) encerrada(s) de data isolada ignorada(s)`);
+    if (item.processamento.respostasForaCompetencia?.length) avisos.push(`${item.processamento.respostasForaCompetencia.length} resposta(s) encerrada(s) fora da competência ignorada(s)`);
+    if (item.processamento.rawDataForaCompetencia?.length) avisos.push(`${item.processamento.rawDataForaCompetencia.length} linha(s) bruta(s) fora da competência bloqueada(s)`);
     if (item.processamento.duplicadasRemovidas) avisos.push(`${item.processamento.duplicadasRemovidas} linha(s) repetida(s) consolidadas pelo último horário`);
     if (item.processamento.foraDaProgramacao.length) avisos.push(`${item.processamento.foraDaProgramacao.length} resposta(s) fora da programação`);
 
@@ -2869,7 +3423,7 @@ function renderizarPreviewImportacao() {
           <strong>${escaparHtml(item.fileName)}</strong>
           <div class="preview-meta">${item.processamento.respostas.length} linha(s) encerrada(s) reconhecida(s) • ${item.processamento.respostasUnicas?.length || 0} rotina(s) única(s) • ${item.processamento.datas.length} data(s) • aba ${escaparHtml(item.sheetName || 'principal')}</div>
         </div>
-        <span class="status-tag">Pronta</span>
+        <span class="status-tag">${item.processamento.competenciaArquivo ? `Competência: ${escaparHtml(formatarCompetencia(item.processamento.competenciaArquivo))}` : 'Pronta'}</span>
       </div>
       <div class="import-result-summary">
         <span><strong>${resumoItem.previstas}</strong> previstas</span>
@@ -2906,11 +3460,10 @@ async function montarPreviewArquivos() {
   for (const arquivo of arquivos) {
     try {
       const sheets = /\.csv$/i.test(arquivo.name) ? parseCsv(await arquivo.text()) : await parseXlsx(arquivo);
-      const processamento = processarPlanilhaMoki(sheets);
+      const processamento = processarPlanilhaMoki(sheets, { fileName: arquivo.name });
       const sheetName = processamento.nomeAba || obterNomeAbaRotinas(sheets);
       previewsImportacao.push({
         fileName: arquivo.name,
-        sheets,
         processamento,
         respostas: processamento.respostas,
         resultados: processamento.resultados,
@@ -2971,6 +3524,47 @@ function substituirSnapshotLocal(snapshot) {
   recomporSnapshotsAtivos();
 }
 
+function agruparItensPorData(lista = []) {
+  return lista.reduce((mapa, item) => {
+    const data = formatarData(item?.data);
+    if (!data) return mapa;
+    if (!mapa.has(data)) mapa.set(data, []);
+    mapa.get(data).push(item);
+    return mapa;
+  }, new Map());
+}
+
+function hashTextoSimples(texto = '') {
+  let hash = 2166136261;
+  for (let i = 0; i < texto.length; i += 1) {
+    hash ^= texto.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function gerarImportBatchId(fileName, importedAt, indice = 0) {
+  return `import-${String(importedAt).replace(/[^0-9]/g, '').slice(0, 17)}-${indice}-${hashTextoSimples(fileName)}`;
+}
+
+function dataDentroPrazoDeBruto(dataIso) {
+  const data = dataIsoParaDate(dataIso);
+  if (!data) return false;
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const limite = new Date(hoje);
+  limite.setDate(limite.getDate() - PRAZO_DADOS_BRUTOS_DIAS);
+  return data >= limite;
+}
+
+async function restaurarSnapshotAnterior(snapshotAnterior, snapshotId) {
+  if (!firebaseDisponivel) return true;
+  if (snapshotAnterior && Array.isArray(snapshotAnterior.data)) {
+    return salvarSnapshotNoFirebaseVerificado(snapshotAnterior, 1);
+  }
+  return excluirSnapshotNoFirebase(snapshotId);
+}
+
 async function importarArquivo() {
   const arquivos = Array.from(fileInput?.files || []);
   if (!arquivos.length) {
@@ -2978,86 +3572,112 @@ async function importarArquivo() {
     return;
   }
 
-  if (!previewsImportacao.length) {
-    await montarPreviewArquivos();
-  }
-
+  if (!previewsImportacao.length) await montarPreviewArquivos();
   const previewsValidas = previewsImportacao.filter((item) => !item.error && Array.isArray(item.respostas));
   if (!previewsValidas.length) {
     setImportStatus('Nenhuma planilha Moki válida ficou pronta para importação.', 'Falha na importação');
     return;
   }
 
-  const respostasNovas = mesclarRespostas(previewsValidas.flatMap((item) => item.respostas || []));
-  const rawData = previewsValidas.flatMap((item) => item.rawData || []);
-  const datas = [...new Set(respostasNovas.map((item) => item.data).filter(Boolean))].sort();
-  const nomesArquivos = [...new Set(previewsValidas.map((item) => item.fileName))];
-
-  if (!datas.length) {
-    setImportStatus('Nenhuma data válida foi identificada nas respostas do Moki.', 'Falha na importação');
-    return;
-  }
-
-  setImportStatus(
-    datas.length === 1
-      ? `Processando as rotinas de ${datas[0].split('-').reverse().join('/')}...`
-      : `Processando rotinas de ${datas.length} datas...`,
-    'Importando...'
-  );
-
+  let arquivosImportados = 0;
   let datasImportadas = 0;
   let sincronizadas = 0;
   let totalPrevistas = 0;
   let totalRealizadas = 0;
   let totalAtrasadas = 0;
   let totalPendentes = 0;
+  let totalForaCompetencia = 0;
   const erros = [];
+  const respostasEfetivamenteImportadas = [];
 
-  for (const data of datas) {
-    const respostasData = respostasNovas.filter((item) => item.data === data);
-    const gerado = gerarResultadosBaseParaData(data, respostasData);
-    const resultados = normalizarBaseCompleta(gerado.resultados, 'importada');
-    const summary = resumirResultadosImportacao(resultados);
-    const agora = new Date();
-    const snapshotId = `rotinas-${data}`;
-    const rawDataDia = rawData.filter((item) => item.data === data);
-    const respostasPersistidas = gerado.respostasMescladas.map(compactarRespostaParaPersistencia);
-    const snapshot = {
-      id: snapshotId,
-      fileName: nomesArquivos.join(' + '),
-      importedAt: agora.toISOString(),
-      total: resultados.length,
-      responsesCount: respostasPersistidas.length,
-      latestDate: data,
-      data: respostasPersistidas,
-      dataKind: 'responses',
-      rawData: rawDataDia,
-      rawRowsCount: rawDataDia.length,
-      rawExpiresAt: dataExpiracaoDadosBrutos(agora),
-      rawAvailable: true,
-      rawDeletedAt: '',
-      summary,
-      chunksCount: 0,
-      rawChunksCount: 0,
-      schemaVersion: RESULT_SCHEMA_VERSION
-    };
-
-    const sincronizado = firebaseDisponivel ? await salvarSnapshotNoFirebase(snapshot) : true;
-    if (!sincronizado && firebaseDisponivel) {
-      erros.push(`${data.split('-').reverse().join('/')}: falha ao sincronizar no Firebase`);
+  for (let indiceArquivo = 0; indiceArquivo < previewsValidas.length; indiceArquivo += 1) {
+    const preview = previewsValidas[indiceArquivo];
+    const respostasArquivo = mesclarRespostas(preview.respostas || []);
+    const rawArquivo = Array.isArray(preview.rawData) ? preview.rawData : [];
+    const gruposRespostas = agruparItensPorData(respostasArquivo);
+    const gruposRaw = agruparItensPorData(rawArquivo);
+    const datas = [...gruposRespostas.keys()].sort();
+    if (!datas.length) {
+      erros.push(`${preview.fileName}: nenhuma data válida`);
+      continue;
     }
 
-    const snapshotMemoria = firebaseDisponivel ? { ...snapshot, rawData: undefined } : snapshot;
-    substituirSnapshotLocal(snapshotMemoria);
-    datasImportadas += 1;
-    if (sincronizado && firebaseDisponivel) sincronizadas += 1;
-    totalPrevistas += summary.previstas;
-    totalRealizadas += summary.realizadas;
-    totalAtrasadas += summary.atrasadas;
-    totalPendentes += summary.pendentes;
+    const importadoEm = new Date().toISOString();
+    const importBatchId = gerarImportBatchId(preview.fileName, importadoEm, indiceArquivo);
+    const foraCompetencia = preview.processamento?.respostasForaCompetencia?.length || 0;
+    totalForaCompetencia += foraCompetencia;
+    let arquivoCompleto = true;
+
+    for (let indiceData = 0; indiceData < datas.length; indiceData += 1) {
+      const data = datas[indiceData];
+      setImportStatus(
+        `${preview.fileName}: processando ${indiceData + 1} de ${datas.length} datas (${data.split('-').reverse().join('/')})...`,
+        'Importando e conferindo'
+      );
+
+      const respostasData = gruposRespostas.get(data) || [];
+      const gerado = gerarResultadosBaseParaData(data, respostasData);
+      const resultados = normalizarBaseCompleta(gerado.resultados, 'importada');
+      const summary = resumirResultadosImportacao(resultados);
+      const snapshotId = `rotinas-${data}`;
+      const rawDataDiaCompleto = gruposRaw.get(data) || [];
+      const manterRaw = dataDentroPrazoDeBruto(data);
+      const respostasPersistidas = gerado.respostasMescladas.map(compactarRespostaParaPersistencia);
+      const snapshotAnterior = await carregarSnapshotCompletoPorId(snapshotId);
+      const snapshot = {
+        id: snapshotId,
+        fileName: preview.fileName,
+        importedAt: importadoEm,
+        importBatchId,
+        importBatchImportedAt: importadoEm,
+        sourceCompetence: preview.processamento?.competenciaArquivo || '',
+        sourceCompetenceOrigin: preview.processamento?.competenciaOrigem || '',
+        sourceFileRows: Number(preview.processamento?.rawData?.length || 0) + Number(preview.processamento?.rawDataForaCompetencia?.length || 0),
+        sourceRecognizedRows: preview.processamento?.respostas?.length || 0,
+        sourceOutsideCompetenceCount: foraCompetencia,
+        sourceDatesCount: datas.length,
+        total: resultados.length,
+        responsesCount: respostasPersistidas.length,
+        latestDate: data,
+        data: respostasPersistidas,
+        dataKind: 'responses',
+        rawData: manterRaw ? rawDataDiaCompleto : undefined,
+        rawRowsCount: manterRaw ? rawDataDiaCompleto.length : 0,
+        rawExpiresAt: manterRaw ? dataExpiracaoDadosBrutos(importadoEm) : '',
+        rawAvailable: manterRaw,
+        rawDeletedAt: manterRaw ? '' : importadoEm,
+        summary,
+        chunksCount: 0,
+        rawChunksCount: 0,
+        schemaVersion: RESULT_SCHEMA_VERSION
+      };
+
+      const sincronizado = firebaseDisponivel
+        ? await salvarSnapshotNoFirebaseVerificado(snapshot)
+        : true;
+
+      if (!sincronizado) {
+        arquivoCompleto = false;
+        await restaurarSnapshotAnterior(snapshotAnterior, snapshotId);
+        erros.push(`${preview.fileName} • ${data.split('-').reverse().join('/')}: falha na gravação ou conferência; o resultado anterior foi preservado`);
+        continue;
+      }
+
+      const snapshotMemoria = firebaseDisponivel ? { ...snapshot, rawData: undefined } : snapshot;
+      substituirSnapshotLocal(snapshotMemoria);
+      respostasEfetivamenteImportadas.push(...respostasData);
+      datasImportadas += 1;
+      if (firebaseDisponivel) sincronizadas += 1;
+      totalPrevistas += summary.previstas;
+      totalRealizadas += summary.realizadas;
+      totalAtrasadas += summary.atrasadas;
+      totalPendentes += summary.pendentes;
+    }
+
+    if (arquivoCompleto) arquivosImportados += 1;
   }
 
-  const usoRotinasAtualizado = registrarUsoRotinas(respostasNovas);
+  const usoRotinasAtualizado = registrarUsoRotinas(respostasEfetivamenteImportadas);
   if (usoRotinasAtualizado) {
     salvarStore(STORAGE_KEYS.routineConfig, configRotinas);
     await salvarConfigNoFirebase();
@@ -3073,18 +3693,20 @@ async function importarArquivo() {
   renderizarPreviewImportacao();
   limparDadosBrutosExpirados();
 
-  const prazoTexto = `Os dados brutos serão excluídos automaticamente após ${PRAZO_DADOS_BRUTOS_DIAS} dias; os resultados permanecerão no painel.`;
+  const protecaoTexto = totalForaCompetencia
+    ? ` ${totalForaCompetencia} resposta(s) fora da competência foram bloqueadas e não substituíram outras datas.`
+    : '';
   if (!erros.length) {
     setImportStatus(
-      `${datasImportadas} dia(s) processado(s): ${totalRealizadas} realizadas, ${totalAtrasadas} em atraso e ${totalPendentes} pendentes. ${prazoTexto}`,
-      firebaseDisponivel ? 'Importado e sincronizado' : 'Importado localmente'
+      `${arquivosImportados} planilha(s) e ${datasImportadas} dia(s) processado(s) e conferido(s): ${totalRealizadas} realizadas, ${totalAtrasadas} em atraso e ${totalPendentes} pendentes.${protecaoTexto}`,
+      firebaseDisponivel ? 'Importado, conferido e sincronizado' : 'Importado localmente'
     );
     return;
   }
 
   setImportStatus(
-    `${datasImportadas} dia(s) processado(s) no painel. ${sincronizadas} sincronizado(s) online. ${erros.join(' | ')} ${prazoTexto}`,
-    sincronizadas ? 'Importação parcial' : 'Importado localmente'
+    `${datasImportadas} dia(s) concluído(s). ${sincronizadas} sincronizado(s) online. ${erros.join(' | ')}${protecaoTexto}`,
+    sincronizadas ? 'Importação parcial' : 'Falha na importação'
   );
 }
 
@@ -3570,38 +4192,117 @@ function obterHistoricoLeve() {
     .slice(0, LIMITE_RESUMOS_HISTORICOS);
 }
 
+function somarResumoHistorico(itens = []) {
+  const campos = ['previstas', 'realizadas', 'atrasadas', 'pendentes', 'noPrazo', 'toleranciaInicio', 'toleranciaFim', 'antesHorario', 'semHorario'];
+  return campos.reduce((acc, campo) => {
+    acc[campo] = itens.reduce((total, item) => total + Number(item.summary?.[campo] || 0), 0);
+    return acc;
+  }, {});
+}
+
+function finalizarGrupoHistorico(grupo) {
+  grupo.itens.sort((a, b) => String(a.latestDate || '').localeCompare(String(b.latestDate || '')));
+  grupo.ids = grupo.itens.map((item) => item.id);
+  grupo.datas = grupo.itens.map((item) => item.latestDate).filter(Boolean);
+  grupo.dataInicial = grupo.datas[0] || '';
+  grupo.dataFinal = grupo.datas.at(-1) || '';
+  grupo.summary = somarResumoHistorico(grupo.itens);
+  grupo.rawDisponiveis = grupo.itens.filter((item) => item.rawAvailable !== false && item.rawExpiresAt && !dadosBrutosExpirados(item)).length;
+  grupo.rawExpiresAt = grupo.itens.map((item) => item.rawExpiresAt).filter(Boolean).sort().at(-1) || '';
+  grupo.sourceCompetence = grupo.itens.find((item) => item.sourceCompetence)?.sourceCompetence || '';
+  if (!grupo.sourceCompetence && grupo.dataInicial && grupo.dataFinal && grupo.dataInicial.slice(0, 7) === grupo.dataFinal.slice(0, 7)) {
+    grupo.sourceCompetence = grupo.dataInicial.slice(0, 7);
+  }
+  grupo.sourceOutsideCompetenceCount = Math.max(...grupo.itens.map((item) => Number(item.sourceOutsideCompetenceCount || 0)), 0);
+  grupo.sourceFileRows = Math.max(...grupo.itens.map((item) => Number(item.sourceFileRows || 0)), 0);
+  grupo.sourceRecognizedRows = Math.max(...grupo.itens.map((item) => Number(item.sourceRecognizedRows || 0)), 0);
+  grupo.importedAt = grupo.itens.map((item) => item.importBatchImportedAt || item.importedAt).filter(Boolean).sort()[0] || '';
+  return grupo;
+}
+
+function obterHistoricoAgrupadoPorPlanilha() {
+  const itens = obterHistoricoLeve();
+  const gruposExplicitos = new Map();
+  const legadosPorArquivo = new Map();
+
+  itens.forEach((item) => {
+    if (item.importBatchId) {
+      const chave = `batch:${item.importBatchId}`;
+      if (!gruposExplicitos.has(chave)) gruposExplicitos.set(chave, { chave, fileName: item.fileName, itens: [] });
+      gruposExplicitos.get(chave).itens.push(item);
+      return;
+    }
+    const arquivo = String(item.fileName || 'Importação sem nome');
+    if (!legadosPorArquivo.has(arquivo)) legadosPorArquivo.set(arquivo, []);
+    legadosPorArquivo.get(arquivo).push(item);
+  });
+
+  const grupos = [...gruposExplicitos.values()];
+  legadosPorArquivo.forEach((lista, fileName) => {
+    const ordenados = [...lista].sort((a, b) => new Date(a.importedAt || 0) - new Date(b.importedAt || 0));
+    let grupoAtual = null;
+    ordenados.forEach((item) => {
+      const instante = new Date(item.importedAt || 0).getTime();
+      const podeAgrupar = grupoAtual
+        && Number.isFinite(instante)
+        && Number.isFinite(grupoAtual.ultimoInstante)
+        && instante - grupoAtual.ultimoInstante <= JANELA_AGRUPAMENTO_IMPORTACAO_LEGADA_MS;
+      if (!podeAgrupar) {
+        grupoAtual = {
+          chave: `legacy:${hashTextoSimples(fileName)}:${String(item.importedAt || item.latestDate || grupos.length)}`,
+          fileName,
+          itens: [],
+          ultimoInstante: instante
+        };
+        grupos.push(grupoAtual);
+      }
+      grupoAtual.itens.push(item);
+      grupoAtual.ultimoInstante = instante;
+    });
+  });
+
+  return grupos
+    .map(finalizarGrupoHistorico)
+    .sort((a, b) => new Date(b.importedAt || 0) - new Date(a.importedAt || 0));
+}
+
 function renderHistoricoPlanilhas() {
   const container = document.getElementById('historicoPlanilhas');
   if (!container) return;
-  const historico = obterHistoricoLeve();
+  const historico = obterHistoricoAgrupadoPorPlanilha();
+  historicoPlanilhasAgrupadoAtual = new Map();
   if (!historico.length) {
     container.innerHTML = '<div class="empty-state">Nenhuma importação foi processada ainda.</div>';
     return;
   }
 
   const historicoVisivel = historico.slice(0, limiteHistoricoVisivel);
-  const cards = historicoVisivel.map((snapshot) => {
-    const dataImportacao = new Date(snapshot.importedAt).toLocaleString('pt-BR');
-    const dataReferencia = snapshot.latestDate ? snapshot.latestDate.split('-').reverse().join('/') : 'não identificada';
-    const resumo = snapshot.summary || {};
-    const rawDisponivel = snapshot.rawAvailable !== false && snapshot.rawExpiresAt && !dadosBrutosExpirados(snapshot);
-    const expiraTexto = snapshot.rawExpiresAt ? new Date(snapshot.rawExpiresAt).toLocaleString('pt-BR') : '';
-    const statusRaw = rawDisponivel
-      ? `Dados brutos disponíveis até ${expiraTexto}`
-      : 'Dados brutos excluídos • resultados preservados';
+  const cards = historicoVisivel.map((grupo, indice) => {
+    const uiKey = `grupo-${indice}-${hashTextoSimples(grupo.chave)}`;
+    historicoPlanilhasAgrupadoAtual.set(uiKey, grupo);
+    const dataImportacao = grupo.importedAt ? new Date(grupo.importedAt).toLocaleString('pt-BR') : 'não identificada';
+    const dataInicial = grupo.dataInicial ? grupo.dataInicial.split('-').reverse().join('/') : 'não identificada';
+    const dataFinal = grupo.dataFinal ? grupo.dataFinal.split('-').reverse().join('/') : dataInicial;
+    const periodo = dataInicial === dataFinal ? dataInicial : `${dataInicial} a ${dataFinal}`;
+    const resumo = grupo.summary || {};
+    const statusRaw = grupo.rawDisponiveis
+      ? `Dados temporários em ${grupo.rawDisponiveis} de ${grupo.itens.length} dia(s)${grupo.rawExpiresAt ? ` até ${new Date(grupo.rawExpiresAt).toLocaleString('pt-BR')}` : ''}`
+      : 'Dados brutos excluídos ou não armazenados • resultados preservados';
+    const competencia = grupo.sourceCompetence ? ` • competência protegida: ${formatarCompetencia(grupo.sourceCompetence)}` : '';
+    const bloqueadas = grupo.sourceOutsideCompetenceCount ? ` • ${grupo.sourceOutsideCompetenceCount} resposta(s) fora da competência bloqueada(s)` : '';
 
     return `
       <div class="history-card">
         <div>
-          <div class="history-title">${escaparHtml(snapshot.fileName || `Rotinas ${dataReferencia}`)}</div>
-          <div class="history-meta">Data de referência ${escaparHtml(dataReferencia)} • processada em ${escaparHtml(dataImportacao)}</div>
-          <div class="history-meta">${resumo.previstas || snapshot.total || 0} previstas • ${resumo.realizadas || 0} realizadas • ${resumo.atrasadas || 0} em atraso • ${resumo.pendentes || 0} pendentes</div>
+          <div class="history-title">${escaparHtml(grupo.fileName || 'Planilha importada')}</div>
+          <div class="history-meta">Importada em ${escaparHtml(dataImportacao)} • ${grupo.itens.length} dia(s) • período ${escaparHtml(periodo)}${escaparHtml(competencia)}</div>
+          <div class="history-meta">${resumo.previstas || 0} previstas • ${resumo.realizadas || 0} realizadas • ${resumo.atrasadas || 0} em atraso • ${resumo.pendentes || 0} pendentes${escaparHtml(bloqueadas)}</div>
           <div class="history-meta">${escaparHtml(statusRaw)}</div>
         </div>
-        <div class="status-tag">${rawDisponivel ? 'Dados temporários' : 'Resultado permanente'}</div>
+        <div class="status-tag">${grupo.rawDisponiveis ? 'Dados temporários' : 'Resultado permanente'}</div>
         <div class="history-actions">
-          <button class="btn btn-secondary" type="button" data-action="apply-snapshot" data-id="${snapshot.id}">Reprocessar</button>
-          <button class="btn btn-danger" type="button" data-action="delete-snapshot" data-id="${snapshot.id}">Excluir</button>
+          <button class="btn btn-secondary" type="button" data-action="apply-import-batch" data-group="${escaparHtml(uiKey)}">Reprocessar planilha</button>
+          <button class="btn btn-danger" type="button" data-action="delete-import-batch" data-group="${escaparHtml(uiKey)}">Excluir planilha</button>
         </div>
       </div>`;
   }).join('');
@@ -3609,7 +4310,7 @@ function renderHistoricoPlanilhas() {
   const restante = Math.max(0, historico.length - historicoVisivel.length);
   container.innerHTML = `${cards}${restante ? `
     <div class="history-load-more">
-      <button class="btn btn-secondary" type="button" data-action="load-more-history">Carregar mais ${Math.min(30, restante)} dia(s)</button>
+      <button class="btn btn-secondary" type="button" data-action="load-more-history">Carregar mais ${Math.min(30, restante)} planilha(s)</button>
     </div>` : ''}`;
 }
 
@@ -3726,6 +4427,84 @@ async function excluirSnapshot(snapshotId) {
       ? 'Planilha removida com sucesso. Todos os usuários verão a atualização.'
       : 'Planilha removida neste dispositivo, mas a sincronização online falhou.',
     sincronizado ? 'Removida' : 'Removida localmente'
+  );
+}
+
+async function reprocessarPlanilhaImportada(groupKey) {
+  const grupo = historicoPlanilhasAgrupadoAtual.get(groupKey);
+  if (!grupo) return;
+  let concluidos = 0;
+  const erros = [];
+  for (let indice = 0; indice < grupo.ids.length; indice += 1) {
+    const snapshot = await carregarSnapshotCompletoPorId(grupo.ids[indice]);
+    if (!snapshot) {
+      erros.push(grupo.ids[indice]);
+      continue;
+    }
+    setImportStatus(`${grupo.fileName}: reprocessando ${indice + 1} de ${grupo.ids.length} dias...`, 'Reprocessando planilha');
+    const data = formatarData(snapshot.latestDate);
+    const respostas = (Array.isArray(snapshot.data) ? snapshot.data : []).map(normalizarRespostaPersistida).filter(Boolean);
+    const gerado = data ? gerarResultadosBaseParaData(data, respostas) : { resultados: [] };
+    const dadosPersistidos = respostas.map(compactarRespostaParaPersistencia);
+    const atualizado = {
+      ...snapshot,
+      data: dadosPersistidos,
+      dataKind: 'responses',
+      schemaVersion: RESULT_SCHEMA_VERSION,
+      responsesCount: dadosPersistidos.length,
+      total: gerado.resultados.length,
+      summary: resumirResultadosImportacao(gerado.resultados)
+    };
+    const sincronizado = firebaseDisponivel ? await salvarSnapshotNoFirebaseVerificado(atualizado) : true;
+    if (!sincronizado) {
+      erros.push(data || snapshot.id);
+      continue;
+    }
+    substituirSnapshotLocal(firebaseDisponivel ? { ...atualizado, rawData: undefined } : atualizado);
+    concluidos += 1;
+  }
+  persistirSnapshotsLocais();
+  atualizarBasePorSnapshots(`${grupo.fileName}: ${concluidos} dia(s) reprocessado(s).`);
+  setImportStatus(
+    erros.length
+      ? `${concluidos} dia(s) reprocessado(s). Falha em: ${erros.join(', ')}.`
+      : `${grupo.fileName} reprocessada e conferida por completo.`,
+    erros.length ? 'Reprocessamento parcial' : 'Planilha reprocessada'
+  );
+}
+
+async function excluirPlanilhaImportada(groupKey) {
+  const grupo = historicoPlanilhasAgrupadoAtual.get(groupKey);
+  if (!grupo) return;
+  const confirmado = window.confirm(`Excluir a planilha “${grupo.fileName}” e todos os ${grupo.ids.length} dia(s) importados por ela? Esta ação não pode ser desfeita.`);
+  if (!confirmado) return;
+
+  setImportStatus(`Excluindo ${grupo.fileName}...`, 'Excluindo planilha');
+  const idsRemovidos = [];
+  const idsComFalha = [];
+  for (let indice = 0; indice < grupo.ids.length; indice += 1) {
+    const id = grupo.ids[indice];
+    const removido = firebaseDisponivel ? await excluirSnapshotNoFirebase(id) : true;
+    if (removido) idsRemovidos.push(id);
+    else idsComFalha.push(id);
+  }
+
+  const removidosSet = new Set(idsRemovidos);
+  snapshotsRecentes = snapshotsRecentes.filter((item) => !removidosSet.has(item.id));
+  snapshotsSobDemanda = snapshotsSobDemanda.filter((item) => !removidosSet.has(item.id));
+  resumosDiarios = resumosDiarios.filter((item) => !removidosSet.has(item.id));
+  recomporSnapshotsAtivos();
+  persistirSnapshotsLocais();
+  atualizarBasePorSnapshots(
+    idsComFalha.length
+      ? `${idsRemovidos.length} dia(s) da planilha removido(s); ${idsComFalha.length} não puderam ser excluídos.`
+      : `Planilha ${grupo.fileName} removida por completo.`
+  );
+  setImportStatus(
+    idsComFalha.length
+      ? `Exclusão parcial: ${idsRemovidos.length} dia(s) removido(s) e ${idsComFalha.length} com falha de sincronização.`
+      : `${grupo.fileName} e todos os seus ${idsRemovidos.length} dia(s) foram excluídos.`,
+    idsComFalha.length ? 'Exclusão parcial' : 'Planilha excluída'
   );
 }
 
@@ -3857,8 +4636,8 @@ function configurarAdmin() {
         renderHistoricoPlanilhas();
         return;
       }
-      if (button.dataset.action === 'apply-snapshot') usarSnapshot(button.dataset.id);
-      if (button.dataset.action === 'delete-snapshot') excluirSnapshot(button.dataset.id);
+      if (button.dataset.action === 'apply-import-batch') reprocessarPlanilhaImportada(button.dataset.group);
+      if (button.dataset.action === 'delete-import-batch') excluirPlanilhaImportada(button.dataset.group);
     });
   }
 
@@ -3910,22 +4689,38 @@ function atualizarPendenciasHero(dados) {
 }
 
 function atualizarRotulosAbas() {
-  const ref = ultimaDataDisponivel || new Date().toISOString().slice(0,10);
-  const [y,m,d] = ref.split('-').map(Number);
-  const dataRef = new Date(y, m-1, d);
-  const fmtLonga = dataRef.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' });
+  const inicio = formatarData(filtros.dataInicial?.value);
+  const fim = formatarData(filtros.dataFinal?.value);
+  const ref = fim || inicio || ultimaDataDisponivel || new Date().toISOString().slice(0, 10);
+  const dataRef = dataIsoParaDate(ref) || new Date();
+  const dataInicio = dataIsoParaDate(inicio || ref) || dataRef;
+  const dataFim = dataIsoParaDate(fim || ref) || dataRef;
   const diario = document.getElementById('tabLabelDiario');
   const semanal = document.getElementById('tabLabelSemanal');
   const mensal = document.getElementById('tabLabelMensal');
-  if (diario) diario.textContent = `Hoje • ${fmtLonga}`;
-  const fimSemana = new Date(dataRef); const inicioSemana = new Date(dataRef); inicioSemana.setDate(dataRef.getDate()-6);
-  if (semanal) semanal.textContent = `${inicioSemana.toLocaleDateString('pt-BR',{day:'numeric',month:'short'})} a ${fimSemana.toLocaleDateString('pt-BR',{day:'numeric',month:'short'})}`;
-  if (mensal) mensal.textContent = dataRef.toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
+
+  if (diario) {
+    diario.textContent = inicio && fim && inicio !== fim
+      ? `${dataInicio.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })} a ${dataFim.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`
+      : `Data • ${dataRef.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}`;
+  }
+  if (semanal) {
+    semanal.textContent = `${dataInicio.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })} a ${dataFim.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`;
+  }
+  if (mensal) {
+    const mesmoMes = dataInicio.getFullYear() === dataFim.getFullYear() && dataInicio.getMonth() === dataFim.getMonth();
+    mensal.textContent = mesmoMes
+      ? dataFim.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+      : `Período personalizado`;
+  }
 }
 
 function aplicarPeriodoResumo(periodo) {
   resumoPeriodoAtual = periodo;
-  const ref = ultimaDataDisponivel || new Date().toISOString().slice(0,10);
+  const ref = formatarData(filtros.dataFinal?.value)
+    || formatarData(filtros.dataInicial?.value)
+    || ultimaDataDisponivel
+    || new Date().toISOString().slice(0, 10);
   const base = new Date(`${ref}T00:00:00`);
   const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   if (periodo === 'diario') {
@@ -3937,10 +4732,12 @@ function aplicarPeriodoResumo(periodo) {
     filtros.dataFinal.value = ref;
   } else {
     const ini = new Date(base.getFullYear(), base.getMonth(), 1);
+    const fimMes = new Date(base.getFullYear(), base.getMonth() + 1, 0);
     filtros.dataInicial.value = fmt(ini);
-    filtros.dataFinal.value = ref;
+    filtros.dataFinal.value = fmt(fimMes);
   }
   document.querySelectorAll('.summary-tab').forEach((button) => button.classList.toggle('active', button.dataset.period === periodo));
+  atualizarRotulosAbas();
   renderizarPainel();
 }
 
@@ -3973,6 +4770,7 @@ async function aplicarFiltroComResumoMensal({ preservarDatas = false, sincroniza
   if (sincronizarDependentes) sincronizarFiltrosDependentes();
   if (preservarDatas) {
     ativarResumoMensalSemSobrescreverDatas();
+    atualizarRotulosAbas();
     const pronto = await prepararFiltrosComDetalhes();
     if (pronto) renderizarPainel();
   } else {
@@ -4548,6 +5346,7 @@ function inicializarAplicacao() {
   configurarAdmin();
   configurarAbasRegionaisDashboard();
   configurarAbasResumo();
+  configurarCurvaExecucao();
   configurarApresentacao();
   salvarStore(STORAGE_KEYS.routineConfig, configRotinas);
   salvarStore(STORAGE_KEYS.knownStores, LOJAS_ATIVAS.map((loja) => loja.nome));
