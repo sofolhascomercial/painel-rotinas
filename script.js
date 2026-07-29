@@ -61,7 +61,7 @@ const ADMIN_CREDENTIALS = {
 
 const FORMADORES_ATIVOS = ['Luciano', 'Karina', 'Luana'];
 const FORMADORES_ATIVOS_SLUG = new Set(FORMADORES_ATIVOS.map((item) => slug(item)));
-const APP_STORAGE_VERSION = '2026-07-28-importacao-segura-historico-v9';
+const APP_STORAGE_VERSION = '2026-07-29-variacoes-historicas-v11';
 const RESULT_SCHEMA_VERSION = 5;
 
 const PRAZO_DADOS_BRUTOS_DIAS = 5;
@@ -87,24 +87,51 @@ const MESES_ARQUIVO = [
 ];
 
 const ROTINAS_PADRAO = [
-  { id: 'rotina-01', nome: '01º Promotor - Fotos abertura do dia Até 6h30', nomeMoki: '01º Promotor - Fotos abertura do dia Até 6h30', horarioInicio: '', horarioFim: '06:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
-  { id: 'rotina-02', nome: '02º Promotor - Rotina manhã Até 8h00', nomeMoki: '02º Promotor - Rotina manhã Até 8h00', horarioInicio: '', horarioFim: '08:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
-  { id: 'rotina-03', nome: '03º Promotor -Inventário de entrada até 8h', nomeMoki: '03º Promotor -Inventário de entrada até 8h', horarioInicio: '', horarioFim: '08:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
-  { id: 'rotina-04', nome: '04º Promotor - Montagem de Exposições Até 10h', nomeMoki: '04º Promotor - Montagem de Exposições Até 10h', horarioInicio: '', horarioFim: '10:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
-  { id: 'rotina-05', nome: '05º Promotor - Pedidos e quebras Até 9h00', nomeMoki: '05º Promotor - Pedidos e quebras Até 9h00', horarioInicio: '', horarioFim: '09:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
-  { id: 'rotina-06', nome: '06º Promotor - Reabastecimento 9:30hrs', nomeMoki: '06º Promotor - Reabastecimento 9:30hrs', horarioInicio: '', horarioFim: '09:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
-  { id: 'rotina-07', nome: '07º Promotor - Reabastecimento 10:30hrs', nomeMoki: '07º Promotor - Reabastecimento 10:30hrs', horarioInicio: '', horarioFim: '10:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
-  { id: 'rotina-08', nome: '08º Promotor- Triagem de Produtos', nomeMoki: '08º Promotor- Triagem de Produtos', horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
-  { id: 'rotina-09', nome: '09ºPromotor - Relatório Fotográfico Até 11:30hrs', nomeMoki: '09ºPromotor - Relatório Fotográfico Até 11:30hrs', aliases: ['09ºPromotor - Relatório Fotográfico Até 11hrs', 'Relatório Fotográfico Até 11hrs'], horarioInicio: '', horarioFim: '11:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-01', nome: '01º Promotor - Fotos abertura do dia Até 6h30', nomeMoki: '01º Promotor - Fotos abertura do dia Até 6h30', aliases: ['1o Promotor - Fotos abertura do dia Até 6h30'], horarioInicio: '', horarioFim: '06:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-02', nome: '02º Promotor - Rotina manhã Até 8h00', nomeMoki: '02º Promotor - Rotina manhã Até 8h00', aliases: ['2o Promotor - Rotina manhã Até 8h00'], horarioInicio: '', horarioFim: '08:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-03', nome: '03º Promotor -Inventário de entrada até 8h', nomeMoki: '03º Promotor -Inventário de entrada até 8h', aliases: ['03° Inventário de entrada até 8h'], horarioInicio: '', horarioFim: '08:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-04', nome: '04º Promotor - Montagem de Exposições Até 10h', nomeMoki: '04º Promotor - Montagem de Exposições Até 10h', aliases: ['04o Promotor - Montagem de Exposições Até 9h00', '3o Promotor - Montagem de Exposições Até 9h00', '[Até 9h00] Promotor - Montagem de Exposições'], horarioInicio: '', horarioFim: '10:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-05', nome: '05º Promotor - Pedidos e quebras Até 9h00', nomeMoki: '05º Promotor - Pedidos e quebras Até 9h00', aliases: ['04o Promotor - Pedidos e quebras Até 9h00', '4o Promotor - Pedidos e quebras Até 9h00'], horarioInicio: '', horarioFim: '09:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-06', nome: '06º Promotor - Reabastecimento 9:30hrs', nomeMoki: '06º Promotor - Reabastecimento 9:30hrs', aliases: ['05o Promotor - Reabastecimento 9:30hrs', '5o Promotor - Reabastecimento 9:30hrs'], horarioInicio: '', horarioFim: '09:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-07', nome: '07º Promotor - Reabastecimento 10:30hrs', nomeMoki: '07º Promotor - Reabastecimento 10:30hrs', aliases: ['06o Promotor - Reabastecimento 10:30hrs', '7o Promotor - Reabastecimento 10:30hrs'], horarioInicio: '', horarioFim: '10:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-08', nome: '08º Promotor- Triagem de Produtos', nomeMoki: '08º Promotor- Triagem de Produtos', aliases: ['07o Promotor- Triagem de Produtos', '8o Promotor- Triagem de Produtos'], horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-09', nome: '09ºPromotor - Relatório Fotográfico Até 11:30hrs', nomeMoki: '09ºPromotor - Relatório Fotográfico Até 11:30hrs', aliases: ['09ºPromotor - Relatório Fotográfico Até 11hrs', '09oPromotor - Relatório Fotográfico Até 11hrs', '08oPromotor - Relatório Fotográfico Até 11hrs', '9oPromotor - Relatório Fotográfico Até 11hrs', 'Relatório Fotográfico Até 11hrs', '[Até 11h] Promotor - Relatório Fotográfico'], horarioInicio: '', horarioFim: '11:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
   { id: 'rotina-10', nome: '10° Inventário de saída  até 11:30', nomeMoki: '10° Inventário de saída  até 11:30', horarioInicio: '', horarioFim: '11:30', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
-  { id: 'rotina-11', nome: '11º Promotor - Banca de Saída 11:45hrs', nomeMoki: '11º Promotor - Banca de Saída 11:45hrs', horarioInicio: '', horarioFim: '11:45', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
-  { id: 'rotina-12', nome: '12º Promotor- Notas fiscais E Quebras', nomeMoki: '12º Promotor- Notas fiscais E Quebras', horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-11', nome: '11º Promotor - Banca de Saída 11:45hrs', nomeMoki: '11º Promotor - Banca de Saída 11:45hrs', aliases: ['09o Promotor - Banca de Saída 11:45hrs'], horarioInicio: '', horarioFim: '11:45', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
+  { id: 'rotina-12', nome: '12º Promotor- Notas fiscais E Quebras', nomeMoki: '12º Promotor- Notas fiscais E Quebras', aliases: ['PROMOTOR- Notas fiscais E Quebras'], horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: 'todas', ativa: true },
   { id: 'rotina-segunda-limpeza', nome: 'Promotor - Limpeza das Bancas [2ª. FEIRA]', nomeMoki: 'Promotor - Limpeza das Bancas [2ª. FEIRA]', horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [1], escopo: 'todas', ativa: true },
-  { id: 'rotina-segunda-quinta-precos', nome: 'Promotor - Troca de Preços [2ª & 5ª FEIRA]', nomeMoki: 'Promotor - Troca de Preços [2ª & 5ª FEIRA]', horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [1,4], escopo: 'todas', ativa: true },
+  { id: 'rotina-segunda-quinta-precos', nome: 'Promotor - Troca de Preços [2ª & 5ª FEIRA]', nomeMoki: 'Promotor - Troca de Preços [2ª & 5ª FEIRA]', aliases: ['Promotor - Troca de Preços [2a'], horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [1,4], escopo: 'todas', ativa: true },
   { id: 'rotina-12x36-inventario-saida', nome: 'Inventário de saída 12x36', nomeMoki: 'Inventário de saída 12x36', horarioInicio: '', horarioFim: '', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: '12x36', ativa: true },
   { id: 'rotina-12x36-reab-14', nome: 'Reabastecimento 14:00h', nomeMoki: 'Reabastecimento 14:00h', horarioInicio: '', horarioFim: '14:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: '12x36', ativa: true },
   { id: 'rotina-12x36-reab-16', nome: 'Reabastecimento 16:00h', nomeMoki: 'Reabastecimento 16:00h', horarioInicio: '', horarioFim: '16:00', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: '12x36', ativa: true },
   { id: 'rotina-12x36-saida-1745', nome: 'Reabastecimento Saída Até 17:45', nomeMoki: 'Reabastecimento Saída Até 17:45', horarioInicio: '', horarioFim: '17:45', toleranciaInicioMin: 0, toleranciaFimMin: 0, dias: [0,1,2,3,4,5,6], escopo: '12x36', ativa: true }
+
+];
+
+// Regras específicas das nomenclaturas antigas encontradas nos relatórios de janeiro a julho.
+// Elas preservam o horário válido no nome histórico sem alterar a regra atual da rotina.
+const REGRAS_HISTORICAS_CHECKLIST = [
+  {
+    rotinaId: 'rotina-09',
+    aliases: [
+      '09ºPromotor - Relatório Fotográfico Até 11hrs',
+      '09oPromotor - Relatório Fotográfico Até 11hrs',
+      '08oPromotor - Relatório Fotográfico Até 11hrs',
+      '9oPromotor - Relatório Fotográfico Até 11hrs',
+      'Relatório Fotográfico Até 11hrs',
+      '[Até 11h] Promotor - Relatório Fotográfico'
+    ],
+    horarioFim: '11:00'
+  },
+  {
+    rotinaId: 'rotina-04',
+    aliases: [
+      '04o Promotor - Montagem de Exposições Até 9h00',
+      '3o Promotor - Montagem de Exposições Até 9h00',
+      '[Até 9h00] Promotor - Montagem de Exposições'
+    ],
+    horarioFim: '09:00'
+  }
 ];
 
 const LOJAS_ATIVAS = [
@@ -1108,8 +1135,12 @@ function normalizarRotinaConfigurada(item = {}, padrao = null, ordemFallback = 0
   if (!id || !nome) return null;
 
   const nomeMoki = String(item.nomeMoki || base.nomeMoki || nome).trim().replace(/\s+/g, ' ');
-  const aliases = normalizarAliasesRotina(item.aliases || base.aliases || [])
-    .filter((alias) => ![nome, nomeMoki].some((valor) => slugChecklist(valor) === slugChecklist(alias)));
+  // Os aliases oficiais são obrigatórios e nunca podem ser apagados por uma configuração
+  // antiga salva no navegador ou no Firebase. Aliases adicionais do ADM são somados a eles.
+  const aliases = normalizarAliasesRotina([
+    ...(Array.isArray(base.aliases) ? base.aliases : []),
+    ...(Array.isArray(item.aliases) ? item.aliases : normalizarAliasesRotina(item.aliases || []))
+  ]).filter((alias) => ![nome, nomeMoki].some((valor) => slugChecklist(valor) === slugChecklist(alias)));
   const diasBase = Array.isArray(item.dias) ? item.dias : (Array.isArray(base.dias) ? base.dias : [1,2,3,4,5,6]);
   const dias = [...new Set(diasBase.map(Number).filter((dia) => Number.isInteger(dia) && dia >= 0 && dia <= 6))].sort((a, b) => a - b);
   const vigenciaInicio = normalizarDataIsoSimples(item.vigenciaInicio || base.vigenciaInicio || '');
@@ -1208,13 +1239,38 @@ function separarCodigoNomeUnidade(valor = '') {
   };
 }
 
-function encontrarConfigRotinaPorNome(nome) {
+function encontrarCorrespondenciaRotinaPorNome(nome) {
   const chave = slugChecklist(nome);
   if (!chave) return null;
-  return configRotinas.find((rotina) => {
-    const candidatos = [rotina.nome, rotina.nomeMoki, ...(Array.isArray(rotina.aliases) ? rotina.aliases : [])];
-    return candidatos.some((item) => slugChecklist(item) === chave);
-  }) || null;
+
+  for (const rotina of configRotinas) {
+    const principais = [rotina.nome, rotina.nomeMoki].filter(Boolean);
+    const principal = principais.find((item) => slugChecklist(item) === chave);
+    if (principal) return { rotina, tipo: 'principal', nomeCorrespondente: principal };
+
+    const alias = (Array.isArray(rotina.aliases) ? rotina.aliases : [])
+      .find((item) => slugChecklist(item) === chave);
+    if (alias) return { rotina, tipo: 'alias', nomeCorrespondente: alias };
+  }
+
+  return null;
+}
+
+function encontrarConfigRotinaPorNome(nome) {
+  return encontrarCorrespondenciaRotinaPorNome(nome)?.rotina || null;
+}
+
+function obterRegraPontualidadeResposta(rotina, checklistOriginal = '') {
+  if (!rotina) return rotina;
+  const chave = slugChecklist(checklistOriginal);
+  if (!chave) return rotina;
+
+  const regra = REGRAS_HISTORICAS_CHECKLIST.find((item) =>
+    item.rotinaId === rotina.id
+    && item.aliases.some((alias) => slugChecklist(alias) === chave)
+  );
+
+  return regra ? { ...rotina, horarioFim: regra.horarioFim || rotina.horarioFim } : rotina;
 }
 
 function obterConfigRotinaPorId(id) {
@@ -1507,7 +1563,11 @@ function enriquecerRegistro(base, index, mapaFormadores = new Map(), mapaPromoto
   const rotinaNome = String(base.rotina || '').trim();
   const status = normalizarStatus(base.status);
   const rotinaConfig = obterConfigRotinaPorId(base.rotinaId) || encontrarConfigRotinaPorNome(rotinaNome);
-  const pontualidade = classificarPontualidade(rotinaConfig, base.horaRealizada, status);
+  const rotinaPontualidade = obterRegraPontualidadeResposta(
+    rotinaConfig,
+    base.checklistOriginal || base.checklist || rotinaNome
+  );
+  const pontualidade = classificarPontualidade(rotinaPontualidade, base.horaRealizada, status);
 
   return {
     ...base,
@@ -1524,10 +1584,10 @@ function enriquecerRegistro(base, index, mapaFormadores = new Map(), mapaPromoto
     rotinaId: rotinaConfig?.id || base.rotinaId || '',
     status,
     horaRealizada: validarHorario(base.horaRealizada),
-    horarioInicioPrevisto: rotinaConfig?.horarioInicio || '',
-    horarioFimPrevisto: rotinaConfig?.horarioFim || '',
-    toleranciaInicioMin: rotinaConfig?.toleranciaInicioMin ?? 0,
-    toleranciaFimMin: rotinaConfig?.toleranciaFimMin ?? 0,
+    horarioInicioPrevisto: rotinaPontualidade?.horarioInicio || '',
+    horarioFimPrevisto: rotinaPontualidade?.horarioFim || '',
+    toleranciaInicioMin: rotinaPontualidade?.toleranciaInicioMin ?? 0,
+    toleranciaFimMin: rotinaPontualidade?.toleranciaFimMin ?? 0,
     ...pontualidade
   };
 }
@@ -2769,6 +2829,7 @@ function extrairRespostasMoki(sheets) {
 
   let respostas = [];
   const naoReconhecidos = [];
+  const variacoesReconhecidas = [];
   const linhasInvalidas = [];
   const naoEncerrados = [];
   const datasDivergentes = [];
@@ -2800,7 +2861,8 @@ function extrairRespostasMoki(sheets) {
     const dataReferencia = formatarData(dataReferenciaOriginal) || dataHora.data;
     const lojaAtiva = resolverLojaAtiva(lojaOriginal, codigoUnidade);
     const loja = lojaAtiva?.nome || renomearLojaSeNecessario(lojaOriginal);
-    const rotinaConfig = encontrarConfigRotinaPorNome(checklistOriginal);
+    const correspondenciaRotina = encontrarCorrespondenciaRotinaPorNome(checklistOriginal);
+    const rotinaConfig = correspondenciaRotina?.rotina || null;
 
     const raw = {
       linha: numeroLinha,
@@ -2842,6 +2904,17 @@ function extrairRespostasMoki(sheets) {
     if (!rotinaConfig) {
       naoReconhecidos.push(raw);
       return;
+    }
+
+    if (correspondenciaRotina?.tipo === 'alias') {
+      const regraHistorica = obterRegraPontualidadeResposta(rotinaConfig, checklistOriginal);
+      variacoesReconhecidas.push({
+        ...raw,
+        rotinaId: rotinaConfig.id,
+        rotinaReconhecida: rotinaConfig.nome,
+        aliasReconhecido: correspondenciaRotina.nomeCorrespondente,
+        horarioFimAplicado: regraHistorica?.horarioFim || rotinaConfig.horarioFim || ''
+      });
     }
 
     respostas.push({
@@ -2891,6 +2964,7 @@ function extrairRespostasMoki(sheets) {
     linhaCabecalho,
     respostas,
     naoReconhecidos,
+    variacoesReconhecidas,
     linhasInvalidas,
     naoEncerrados,
     datasDivergentes,
@@ -3001,7 +3075,8 @@ function gerarResultadosBaseParaData(data, respostasInformadas = []) {
       if (!rotinaAplicaNaLoja(rotina, loja, data)) return;
       const resposta = mapaRespostas.get(chaveResposta(data, loja, rotina.id));
       const status = resposta ? 'realizada' : 'pendente';
-      const pontualidade = classificarPontualidade(rotina, resposta?.horaRealizada || '', status);
+      const rotinaPontualidade = obterRegraPontualidadeResposta(rotina, resposta?.checklist || resposta?.checklistOriginal || '');
+      const pontualidade = classificarPontualidade(rotinaPontualidade, resposta?.horaRealizada || '', status);
       const lojaAtiva = resolverLojaAtiva(loja);
       const lojaNormalizada = lojaAtiva?.nome || loja;
       const lojaInfo = parseLoja(lojaNormalizada);
@@ -3024,10 +3099,10 @@ function gerarResultadosBaseParaData(data, respostasInformadas = []) {
         status,
         dataHoraRealizada: resposta?.dataHoraRealizada || '',
         horaRealizada: resposta?.horaRealizada || '',
-        horarioInicioPrevisto: rotina.horarioInicio,
-        horarioFimPrevisto: rotina.horarioFim,
-        toleranciaInicioMin: rotina.toleranciaInicioMin,
-        toleranciaFimMin: rotina.toleranciaFimMin,
+        horarioInicioPrevisto: rotinaPontualidade.horarioInicio,
+        horarioFimPrevisto: rotinaPontualidade.horarioFim,
+        toleranciaInicioMin: rotinaPontualidade.toleranciaInicioMin,
+        toleranciaFimMin: rotinaPontualidade.toleranciaFimMin,
         escopoRotina: rotina.escopo,
         diasRotina: rotina.dias,
         ...pontualidade,
@@ -3374,6 +3449,27 @@ function gerarLinhasPreviewMoki(processamento, limite = 8) {
   });
 }
 
+function resumirVariacoesReconhecidas(lista = [], limite = 12) {
+  const grupos = new Map();
+  lista.forEach((item) => {
+    const original = String(item.checklist || '').trim();
+    const rotina = String(item.rotinaReconhecida || '').trim();
+    const chave = `${slugChecklist(original)}|${item.rotinaId || ''}`;
+    if (!chave || !original) return;
+    const atual = grupos.get(chave) || {
+      original,
+      rotina,
+      horarioFimAplicado: item.horarioFimAplicado || '',
+      quantidade: 0
+    };
+    atual.quantidade += 1;
+    grupos.set(chave, atual);
+  });
+  return [...grupos.values()]
+    .sort((a, b) => b.quantidade - a.quantidade || a.original.localeCompare(b.original, 'pt-BR'))
+    .slice(0, limite);
+}
+
 function renderizarPreviewImportacao() {
   const container = document.getElementById('importPreviewList');
   const resumo = document.getElementById('selectedFilesSummary');
@@ -3407,6 +3503,7 @@ function renderizarPreviewImportacao() {
 
     const avisos = [];
     if (item.processamento.naoReconhecidos.length) avisos.push(`${item.processamento.naoReconhecidos.length} checklist(s) não reconhecido(s)`);
+    if (item.processamento.variacoesReconhecidas?.length) avisos.push(`${item.processamento.variacoesReconhecidas.length} variação(ões) histórica(s) reconhecida(s)`);
     if (item.processamento.linhasInvalidas.length) avisos.push(`${item.processamento.linhasInvalidas.length} linha(s) inválida(s)`);
     if (item.processamento.naoEncerrados.length) avisos.push(`${item.processamento.naoEncerrados.length} resposta(s) em aberto ignorada(s)`);
     if (item.processamento.datasDivergentes.length) avisos.push(`${item.processamento.datasDivergentes.length} resposta(s) com data de início divergente`);
@@ -3416,6 +3513,15 @@ function renderizarPreviewImportacao() {
     if (item.processamento.rawDataForaCompetencia?.length) avisos.push(`${item.processamento.rawDataForaCompetencia.length} linha(s) bruta(s) fora da competência bloqueada(s)`);
     if (item.processamento.duplicadasRemovidas) avisos.push(`${item.processamento.duplicadasRemovidas} linha(s) repetida(s) consolidadas pelo último horário`);
     if (item.processamento.foraDaProgramacao.length) avisos.push(`${item.processamento.foraDaProgramacao.length} resposta(s) fora da programação`);
+
+    const variacoes = resumirVariacoesReconhecidas(item.processamento.variacoesReconhecidas || []);
+    const variacoesHtml = variacoes.length ? `<details class="preview-variation-details">
+      <summary>Ver variações históricas reconhecidas (${item.processamento.variacoesReconhecidas.length})</summary>
+      <div class="preview-variation-list">${variacoes.map((variacao) => `<div class="preview-variation-item">
+        <strong>${formatarNumero.format(variacao.quantidade)}×</strong>
+        <span><b>${escaparHtml(variacao.original)}</b> → ${escaparHtml(variacao.rotina)}${variacao.horarioFimAplicado ? ` • limite aplicado: ${escaparHtml(variacao.horarioFimAplicado)}` : ''}</span>
+      </div>`).join('')}</div>
+    </details>` : '';
 
     return `<div class="preview-card">
       <div class="preview-card-head">
@@ -3432,6 +3538,7 @@ function renderizarPreviewImportacao() {
         <span><strong>${resumoItem.pendentes}</strong> pendentes</span>
       </div>
       ${avisos.length ? `<div class="admin-feedback">${escaparHtml(avisos.join(' • '))}</div>` : ''}
+      ${variacoesHtml}
       <div class="table-shell preview-table-shell">
         <table>
           <thead><tr><th>Data</th><th>Checklist</th><th>Loja</th><th>Hora</th><th>Resultado</th></tr></thead>

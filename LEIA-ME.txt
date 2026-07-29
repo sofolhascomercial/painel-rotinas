@@ -1,40 +1,40 @@
-PAINEL DE ROTINAS SÓ FOLHAS — CURVA DE EXECUÇÃO COMPARATIVA
+PAINEL DE ROTINAS SÓ FOLHAS — VARIAÇÕES HISTÓRICAS DE CHECKLIST
 Versão: 29/07/2026
 
 ALTERAÇÃO PRINCIPAL
-Foi acrescentado ao dashboard o painel “Curva de execução”, logo abaixo dos indicadores principais.
+O importador agora reconhece as nomenclaturas antigas encontradas nas planilhas de janeiro a julho, sem remover nenhuma funcionalidade existente.
 
-PERÍODOS DISPONÍVEIS
-- 7 dias
-- 15 dias
-- 30 dias
-- 60 dias
-- 3 meses
-- 6 meses
-- 1 ano
+O QUE FOI CORRIGIDO
+- Aliases oficiais são sempre preservados, mesmo quando o navegador ou o Firebase possuem uma configuração antiga salva.
+- Nomes históricos com numeração diferente são associados à rotina correta.
+- Nomes truncados ou abreviados encontrados no Moki são reconhecidos.
+- O horário histórico do próprio checklist é usado na pontualidade:
+  - Relatório Fotográfico “Até 11h” usa limite 11:00.
+  - Montagem de Exposições “Até 9h” usa limite 09:00.
+- A regra atual continua sendo usada nos nomes atuais:
+  - Relatório Fotográfico atual usa 11:30.
+  - Montagem de Exposições atual usa 10:00.
 
-COMPARAÇÃO
-- Linha verde: período atual.
-- Linha tracejada: período anterior equivalente.
-- Variação em pontos percentuais.
-- Média ponderada do período.
-- Melhor e menor resultado.
-- Tooltip com previstas, realizadas, pendentes, no prazo e em atraso.
+PRÉ-VISUALIZAÇÃO
+A tela de importação agora informa quantas variações históricas foram reconhecidas e permite abrir a lista com:
+- nome encontrado na planilha;
+- rotina oficial correspondente;
+- quantidade de ocorrências;
+- limite de horário aplicado quando houver regra histórica.
 
-AGRUPAMENTO
-- 7, 15, 30 e 60 dias: um ponto por dia.
-- 3 e 6 meses: agrupamento semanal.
-- 1 ano: agrupamento mensal.
-
-INTEGRAÇÃO
-- O gráfico usa os resumos diários leves já gravados pelo sistema.
-- Respeita a data final selecionada nos filtros como referência.
-- Respeita as abas Visão Geral, Regional DF/GO e Regional Goiânia – Lojas Fora.
-- Não baixa novamente as linhas brutas das planilhas.
-- O limite de resumos leves foi ampliado para 740 dias para permitir a comparação de 1 ano com o ano anterior.
+FUNCIONALIDADES PRESERVADAS
+- curva de execução comparativa;
+- filtros de 7, 15, 30 e 60 dias, 3 e 6 meses e 1 ano;
+- importação segura por competência;
+- histórico agrupado e exclusão da planilha completa;
+- regionais;
+- rotinas dinâmicas;
+- painel ADM;
+- modo apresentação;
+- limpeza dos dados brutos após cinco dias.
 
 INSTALAÇÃO
 Substitua todos os arquivos do sistema pelos arquivos desta pasta e abra a página com Ctrl + F5.
 
-OBSERVAÇÃO
-Nenhuma coleção nova do Firebase foi criada. As importações, histórico agrupado, exclusão por planilha, proteção de competência, regionais, rotinas dinâmicas, ADM e apresentação foram mantidos.
+IMPORTANTE
+Para corrigir os resultados já gravados, reprocese ou reimporte as planilhas mensais depois de instalar esta versão. Os resultados antigos não são alterados automaticamente até que sejam processados novamente.
