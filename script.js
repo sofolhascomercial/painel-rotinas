@@ -1798,88 +1798,6 @@ function agregarLojasPorFormador(dados) {
   }, {});
 }
 
-function obterDadosResumoAtrasos() {
-  const periodoFiltro = normalizarPeriodo(filtros.dataInicial?.value, filtros.dataFinal?.value);
-  const refFiltro = periodoFiltro.dataFinal
-    || periodoFiltro.dataInicial
-    || ultimaDataDisponivel
-    || new Date().toISOString().slice(0, 10);
-  const refReal = obterUltimaDataImportadaNoPeriodo(periodoFiltro.dataInicial, periodoFiltro.dataFinal)
-    || obterFimRealDoMes(refFiltro)
-    || refFiltro;
-
-  return registros.filter((item) => {
-    const matchRede = filtros.rede.value ? item.rede === filtros.rede.value : true;
-    const matchLoja = filtros.loja.value ? item.loja === filtros.loja.value : true;
-    const matchFormador = filtros.formador.value ? item.formador === filtros.formador.value : true;
-    const matchStatus = filtros.status.value ? item.status === filtros.status.value : true;
-    const matchRotina = filtros.rotina.value ? item.rotina === filtros.rotina.value : true;
-    const matchRegional = registroPertenceRegional(item);
-    const matchData = item.data === refReal;
-    return matchRede && matchLoja && matchFormador && matchStatus && matchRotina && matchRegional && matchData;
-  });
-}
-
-function atualizarAbaRotinasEmAtraso() {
-  const label = document.getElementById('tabLabelAtrasos');
-  if (!label) return;
-  const dadosDia = obterDadosResumoAtrasos();
-  const totalAtrasadas = dadosDia.filter((item) => item.status === 'realizada' && item.pontualidade === 'atrasada').length;
-  if (!dadosDia.length) {
-    label.textContent = 'Sem dados no dia';
-    return;
-  }
-  if (!totalAtrasadas) {
-    label.textContent = 'Sem atrasos no dia';
-    return;
-  }
-  label.textContent = `${formatarNumero.format(totalAtrasadas)} fora do horário`;
-}
-
-function abrirResumoAtrasos() {
-  aplicarPeriodoResumo('diario');
-  requestAnimationFrame(() => {
-    const painel = document.getElementById('rotinasForaHorarioDiario');
-    if (!painel) return;
-    painel.classList.remove('hidden');
-    painel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-}
-
-function renderRotinasForaHorarioDiario(dados) {
-  const painel = document.getElementById('rotinasForaHorarioDiario');
-  const tbody = document.getElementById('rotinasForaHorarioTabela');
-  if (!painel || !tbody) return;
-
-  if (resumoPeriodoAtual !== 'diario') {
-    painel.classList.add('hidden');
-    return;
-  }
-
-  const atrasadas = dados
-    .filter((item) => item.status === 'realizada' && item.pontualidade === 'atrasada')
-    .sort((a, b) => {
-      const horario = String(a.horarioFimPrevisto || '').localeCompare(String(b.horarioFimPrevisto || ''));
-      if (horario !== 0) return horario;
-      const unidade = String(a.loja || a.unidade || '').localeCompare(String(b.loja || b.unidade || ''), 'pt-BR');
-      if (unidade !== 0) return unidade;
-      return String(a.rotina || '').localeCompare(String(b.rotina || ''), 'pt-BR');
-    });
-
-  if (!atrasadas.length) {
-    tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state">Nenhuma rotina realizada fora do horário neste dia.</div></td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = atrasadas.map((item) => `
-    <tr>
-      <td>${escaparHtml(item.loja || item.unidade || '')}</td>
-      <td>${escaparHtml(item.rotina || '')}</td>
-      <td>${escaparHtml(item.horarioFimPrevisto || '--')}</td>
-      <td>${escaparHtml(item.horaRealizada || '--')}</td>
-    </tr>`).join('');
-}
-
 function renderRankingFormadores(dados) {
   const tbody = document.getElementById('rankingFormadoresTabela');
   const agrupado = agregarPorFormador(dados);
@@ -2762,8 +2680,6 @@ function configurarCurvaExecucao() {
 function renderizarPainel() {
   dadosFiltrados = obterDadosFiltrados();
   atualizarKPIs(dadosFiltrados);
-  atualizarAbaRotinasEmAtraso();
-  renderRotinasForaHorarioDiario(dadosFiltrados);
   renderRankingFormadores(dadosFiltrados);
   renderPromotorDestaque(dadosFiltrados);
   renderRankingsPorFormador(dadosFiltrados);
@@ -4997,8 +4913,6 @@ function atualizarRotulosAbas() {
 }
 
 function aplicarPeriodoResumo(periodo) {
-  const painelAtrasos = document.getElementById('rotinasForaHorarioDiario');
-  if (painelAtrasos) painelAtrasos.classList.add('hidden');
   resumoPeriodoAtual = periodo;
   const periodoFiltro = normalizarPeriodo(filtros.dataInicial?.value, filtros.dataFinal?.value);
   const refFiltro = periodoFiltro.dataFinal
@@ -5025,14 +4939,14 @@ function aplicarPeriodoResumo(periodo) {
     filtros.dataInicial.value = fmt(ini);
     filtros.dataFinal.value = refReal;
   }
-  document.querySelectorAll('.summary-tab[data-period]').forEach((button) => button.classList.toggle('active', button.dataset.period === periodo));
+  document.querySelectorAll('.summary-tab').forEach((button) => button.classList.toggle('active', button.dataset.period === periodo));
   atualizarRotulosAbas();
   renderizarPainel();
 }
 
 function configurarAbasResumo() {
   atualizarRotulosAbas();
-  document.querySelectorAll('.summary-tab[data-period]').forEach((button) => {
+  document.querySelectorAll('.summary-tab').forEach((button) => {
     button.addEventListener('click', () => aplicarPeriodoResumo(button.dataset.period));
   });
 }
@@ -5050,7 +4964,7 @@ function configurarSidebar() {
 
 function ativarResumoMensalSemSobrescreverDatas() {
   resumoPeriodoAtual = 'mensal';
-  document.querySelectorAll('.summary-tab[data-period]').forEach((button) => {
+  document.querySelectorAll('.summary-tab').forEach((button) => {
     button.classList.toggle('active', button.dataset.period === 'mensal');
   });
 }
@@ -5122,7 +5036,6 @@ window.PainelSF = Object.assign(window.PainelSF || {}, {
     document.body.classList.remove('admin-mode');
   },
   aplicarPeriodoResumo,
-  abrirResumoAtrasos,
   selecionarRegionalDashboard,
   abrirApresentacao,
   fecharApresentacao,
