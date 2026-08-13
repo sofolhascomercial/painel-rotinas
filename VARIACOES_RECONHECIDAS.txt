@@ -1,0 +1,62 @@
+VARIAÇÕES HISTÓRICAS RECONHECIDAS
+
+FOTOS DE ABERTURA
+- 1o Promotor - Fotos abertura do dia Até 6h30
+  → 01º Promotor - Fotos abertura do dia Até 6h30
+
+ROTINA DA MANHÃ
+- 2o Promotor - Rotina manhã Até 8h00
+  → 02º Promotor - Rotina manhã Até 8h00
+
+INVENTÁRIO DE ENTRADA
+- 03° Inventário de entrada até 8h
+  → 03º Promotor - Inventário de entrada até 8h
+
+MONTAGEM DE EXPOSIÇÕES
+- 04o Promotor - Montagem de Exposições Até 9h00
+- 3o Promotor - Montagem de Exposições Até 9h00
+- [Até 9h00] Promotor - Montagem de Exposições
+  → 04º Promotor - Montagem de Exposições Até 10h
+  Regra histórica aplicada nesses nomes: limite 09:00.
+
+PEDIDOS E QUEBRAS
+- 04o Promotor - Pedidos e quebras Até 9h00
+- 4o Promotor - Pedidos e quebras Até 9h00
+  → 05º Promotor - Pedidos e quebras Até 9h00
+
+REABASTECIMENTO 9H30
+- 05o Promotor - Reabastecimento 9:30hrs
+- 5o Promotor - Reabastecimento 9:30hrs
+  → 06º Promotor - Reabastecimento 9:30hrs
+
+REABASTECIMENTO 10H30
+- 06o Promotor - Reabastecimento 10:30hrs
+- 7o Promotor - Reabastecimento 10:30hrs
+  → 07º Promotor - Reabastecimento 10:30hrs
+
+TRIAGEM DE PRODUTOS
+- 07o Promotor - Triagem de Produtos
+- 8o Promotor - Triagem de Produtos
+  → 08º Promotor - Triagem de Produtos
+
+RELATÓRIO FOTOGRÁFICO
+- 09ºPromotor - Relatório Fotográfico Até 11hrs
+- 09oPromotor - Relatório Fotográfico Até 11hrs
+- 08oPromotor - Relatório Fotográfico Até 11hrs
+- 9oPromotor - Relatório Fotográfico Até 11hrs
+- Relatório Fotográfico Até 11hrs
+- [Até 11h] Promotor - Relatório Fotográfico
+  → 09º Promotor - Relatório Fotográfico Até 11:30hrs
+  Regra histórica aplicada nesses nomes: limite 11:00.
+
+BANCA DE SAÍDA
+- 09o Promotor - Banca de Saída 11:45hrs
+  → 11º Promotor - Banca de Saída 11:45hrs
+
+NOTAS FISCAIS E QUEBRAS
+- PROMOTOR- Notas fiscais E Quebras
+  → 12º Promotor - Notas fiscais e quebras
+
+TROCA DE PREÇOS
+- Promotor - Troca de Preços [2a
+  → Promotor - Troca de Preços [2ª & 5ª FEIRA]

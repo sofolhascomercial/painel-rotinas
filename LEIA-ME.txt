@@ -1,40 +1,36 @@
-PAINEL DE ROTINAS SÓ FOLHAS — VARIAÇÕES HISTÓRICAS DE CHECKLIST
-Versão: 29/07/2026
+PAINEL DE ROTINAS SÓ FOLHAS — DATA REAL E MODO LEVE
+Versão: 2026-07-29-data-real-e-modo-leve-v12
 
-ALTERAÇÃO PRINCIPAL
-O importador agora reconhece as nomenclaturas antigas encontradas nas planilhas de janeiro a julho, sem remover nenhuma funcionalidade existente.
+ALTERAÇÕES DESTA VERSÃO
 
-O QUE FOI CORRIGIDO
-- Aliases oficiais são sempre preservados, mesmo quando o navegador ou o Firebase possuem uma configuração antiga salva.
-- Nomes históricos com numeração diferente são associados à rotina correta.
-- Nomes truncados ou abreviados encontrados no Moki são reconhecidos.
-- O horário histórico do próprio checklist é usado na pontualidade:
-  - Relatório Fotográfico “Até 11h” usa limite 11:00.
-  - Montagem de Exposições “Até 9h” usa limite 09:00.
-- A regra atual continua sendo usada nos nomes atuais:
-  - Relatório Fotográfico atual usa 11:30.
-  - Montagem de Exposições atual usa 10:00.
+1. DATA REAL IMPORTADA
+- O Resumo Diário não usa mais o último dia do calendário do mês.
+- Se julho possui dados somente até 28/07, o painel mostra “Data • 28 de julho”.
+- O Resumo Mensal termina na última data realmente importada.
+- O Resumo Semanal e a Curva de Execução também usam a última data disponível.
+- O dia 31 só aparece depois que houver uma importação válida para 31/07.
 
-PRÉ-VISUALIZAÇÃO
-A tela de importação agora informa quantas variações históricas foram reconhecidas e permite abrir a lista com:
-- nome encontrado na planilha;
-- rotina oficial correspondente;
-- quantidade de ocorrências;
-- limite de horário aplicado quando houver regra histórica.
+2. SISTEMA MAIS LEVE
+- Apenas os 7 dias mais recentes de detalhes ficam carregados na abertura.
+- Datas antigas continuam salvas no Firebase e são carregadas somente quando consultadas.
+- Os resumos históricos permanecem leves e disponíveis para gráficos e comparações.
+- Após cada importação, o sistema libera automaticamente a prévia, dados temporários em memória e detalhes antigos.
+- Em ADM > Configurações existe o botão “Otimizar sistema agora”.
+- A otimização não exclui planilhas, resultados, resumos ou histórico.
 
-FUNCIONALIDADES PRESERVADAS
-- curva de execução comparativa;
-- filtros de 7, 15, 30 e 60 dias, 3 e 6 meses e 1 ano;
-- importação segura por competência;
-- histórico agrupado e exclusão da planilha completa;
-- regionais;
-- rotinas dinâmicas;
-- painel ADM;
-- modo apresentação;
-- limpeza dos dados brutos após cinco dias.
+3. FUNCIONALIDADES PRESERVADAS
+- Importação segura por competência.
+- Histórico agrupado e exclusão da planilha completa.
+- Curva de execução comparativa.
+- Regionais e filtros.
+- Rotinas dinâmicas e variações históricas.
+- Horários históricos, tolerâncias e pontualidade.
+- Painel ADM e modo apresentação.
 
 INSTALAÇÃO
-Substitua todos os arquivos do sistema pelos arquivos desta pasta e abra a página com Ctrl + F5.
+1. Substitua todos os arquivos do sistema pelos arquivos desta pasta.
+2. Abra o painel e pressione Ctrl + F5.
+3. Entre em ADM > Configurações e clique em “Otimizar sistema agora” uma vez, caso o navegador ainda tenha carregado dados da versão anterior.
 
 IMPORTANTE
-Para corrigir os resultados já gravados, reprocese ou reimporte as planilhas mensais depois de instalar esta versão. Os resultados antigos não são alterados automaticamente até que sejam processados novamente.
+O botão “Otimizar sistema agora” libera memória do navegador, mas preserva todo o histórico salvo. Ao consultar uma data antiga, o sistema buscará os detalhes no Firebase sob demanda.

@@ -1,0 +1,20 @@
+TESTES REALIZADOS — VERSÃO DATA REAL E MODO LEVE
+
+1. Validação de sintaxe JavaScript com Node.js: APROVADO.
+2. Validação estrutural do HTML: 156 IDs e nenhum ID duplicado.
+3. Teste de julho com dados importados de 01/07 a 28/07:
+   - Resumo Mensal definiu 01/07/2026 a 28/07/2026.
+   - Resumo Diário exibiu “Data • 28 de julho”.
+   - Não utilizou 31/07/2026 sem existir importação dessa data.
+4. Teste de data específica:
+   - Com 15/07/2026 selecionado, o Resumo Diário permaneceu em 15/07/2026.
+5. Teste de compactação de memória:
+   - Base simulada com 20 dias detalhados foi reduzida para 7 dias carregados.
+   - Dados brutos foram removidos da memória operacional.
+   - Prévia e seleção de arquivo foram liberadas.
+   - Histórico resumido permaneceu preservado.
+6. Verificação do botão “Otimizar sistema agora”: presente e vinculado à função de otimização.
+7. Verificação de versões de cache no HTML/CSS/JS: atualizadas.
+8. Verificação do pacote ZIP: realizada após a geração.
+
+Observação: as regras de importação, aliases históricos, regionais, rotinas dinâmicas e histórico agrupado não foram removidos nem alterados por esta correção.

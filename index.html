@@ -105,19 +105,6 @@
       <main class="dashboard">
 
       
-
-      <section class="summary-tabs-shell summary-highlight-shell">
-        <div class="summary-tabs summary-tabs-single">
-          <button id="summaryLateTab" class="summary-tab summary-tab-alert" type="button" onclick="window.PainelSF && window.PainelSF.abrirResumoAtrasos()">
-            <span class="summary-tab-icon">⏰</span>
-            <span class="summary-tab-copy">
-              <strong>Rotinas em atraso</strong>
-              <small id="tabLabelAtrasos">Sem atrasos no dia</small>
-            </span>
-          </button>
-        </div>
-      </section>
-
       <section class="summary-tabs-shell">
         <div class="summary-tabs">
           <button class="summary-tab active" data-period="diario" type="button" onclick="window.PainelSF && window.PainelSF.aplicarPeriodoResumo('diario')">
@@ -217,28 +204,6 @@
           <p>Total de rotinas não concluídas</p>
           <div class="hero-alert-list" id="painelPendencias"></div>
         </article>
-      </section>
-
-      <section class="panel hidden" id="rotinasForaHorarioDiario" aria-labelledby="rotinasForaHorarioTitle">
-        <div class="section-head">
-          <div>
-            <span class="eyebrow">Atenção</span>
-            <h2 id="rotinasForaHorarioTitle">Rotinas realizadas fora do horário</h2>
-          </div>
-        </div>
-        <div class="table-shell">
-          <table>
-            <thead>
-              <tr>
-                <th>Unidade</th>
-                <th>Rotina</th>
-                <th>Horário previsto</th>
-                <th>Horário realizado</th>
-              </tr>
-            </thead>
-            <tbody id="rotinasForaHorarioTabela"></tbody>
-          </table>
-        </div>
       </section>
 
       <section class="panel execution-curve-panel" id="executionCurvePanel" aria-labelledby="executionCurveTitle">
@@ -712,7 +677,7 @@
   <div id="importBadge" class="hidden"></div>
   <table class="hidden"><tbody id="tabelaResumoPromotores"></tbody></table>
 
-  <script src="script.js?v=20260813-rotinas-fora-horario-v1" defer></script>
+  <script src="script.js?v=20260729-data-real-modo-leve-v12" defer></script>
 
 
 <script>
