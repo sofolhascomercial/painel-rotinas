@@ -61,12 +61,12 @@ const ADMIN_CREDENTIALS = {
 
 const FORMADORES_ATIVOS = ['Luciano', 'Karina', 'Luana'];
 const FORMADORES_ATIVOS_SLUG = new Set(FORMADORES_ATIVOS.map((item) => slug(item)));
-const APP_STORAGE_VERSION = '2026-07-29-variacoes-historicas-v11';
+const APP_STORAGE_VERSION = '2026-07-29-data-real-e-modo-leve-v12';
 const RESULT_SCHEMA_VERSION = 5;
 
 const PRAZO_DADOS_BRUTOS_DIAS = 5;
 const INTERVALO_LIMPEZA_DADOS_BRUTOS_MS = 60 * 60 * 1000;
-const LIMITE_DIAS_DETALHES_INICIAIS = 45;
+const LIMITE_DIAS_DETALHES_INICIAIS = 7;
 const LIMITE_RESUMOS_HISTORICOS = 740;
 const LIMITE_DIAS_CONSULTA_DETALHADA = 90;
 const JANELA_AGRUPAMENTO_IMPORTACAO_LEGADA_MS = 5 * 60 * 1000;
@@ -462,6 +462,8 @@ snapshotsRecentes = snapshotsRecentes
   .slice(0, LIMITE_DIAS_DETALHES_INICIAIS);
 resumosDiarios = resumosDiarios.map(normalizarResumoDiario).filter(Boolean).slice(0, LIMITE_RESUMOS_HISTORICOS);
 snapshotsImportados = [...snapshotsRecentes];
+// Compacta imediatamente versões antigas que ainda mantinham muitos dias no navegador.
+persistirSnapshotsLocais();
 
 function invalidarCacheDados() {
   versaoCacheDados += 1;
@@ -615,6 +617,41 @@ function persistirSnapshotsLocais() {
 
   salvarStore(STORAGE_KEYS.importedSnapshots, resumo);
   persistirResumosLocais();
+}
+
+function compactarMemoriaOperacional() {
+  previewsImportacao = [];
+  if (fileInput) fileInput.value = '';
+  snapshotsSobDemanda = [];
+  periodoSobDemandaAtual = { dataInicial: '', dataFinal: '' };
+  snapshotsRecentes = snapshotsRecentes
+    .filter((item) => item?.id)
+    .sort((a, b) => String(b.latestDate || '').localeCompare(String(a.latestDate || '')))
+    .slice(0, LIMITE_DIAS_DETALHES_INICIAIS)
+    .map((item) => ({ ...item, rawData: undefined }));
+  recomporSnapshotsAtivos();
+  persistirSnapshotsLocais();
+}
+
+function otimizarSistemaAgora() {
+  compactarMemoriaOperacional();
+  filtros.rede.value = '';
+  filtros.loja.value = '';
+  filtros.formador.value = '';
+  filtros.status.value = '';
+  filtros.rotina.value = '';
+  const ultima = obterUltimaDataImportadaNoPeriodo('', '') || ultimaDataDisponivel;
+  if (ultima) {
+    filtros.dataInicial.value = ultima;
+    filtros.dataFinal.value = ultima;
+    resumoPeriodoAtual = 'diario';
+    document.querySelectorAll('.summary-tab').forEach((button) => button.classList.toggle('active', button.dataset.period === 'diario'));
+  }
+  atualizarBasePorSnapshots('Memória otimizada. Somente os 7 dias mais recentes permanecem carregados; datas antigas continuam salvas e são abertas sob demanda.');
+  renderizarPreviewImportacao();
+  const feedback = document.getElementById('memoryOptimizationFeedback');
+  if (feedback) feedback.textContent = 'Otimização concluída. Os dados históricos permanecem preservados no Firebase.';
+  setImportStatus('Memória liberada. O histórico continua salvo e será carregado apenas quando você consultar uma data antiga.', 'Sistema otimizado');
 }
 
 function atualizarBasePorSnapshots(detalhe = '') {
@@ -1761,6 +1798,88 @@ function agregarLojasPorFormador(dados) {
   }, {});
 }
 
+function obterDadosResumoAtrasos() {
+  const periodoFiltro = normalizarPeriodo(filtros.dataInicial?.value, filtros.dataFinal?.value);
+  const refFiltro = periodoFiltro.dataFinal
+    || periodoFiltro.dataInicial
+    || ultimaDataDisponivel
+    || new Date().toISOString().slice(0, 10);
+  const refReal = obterUltimaDataImportadaNoPeriodo(periodoFiltro.dataInicial, periodoFiltro.dataFinal)
+    || obterFimRealDoMes(refFiltro)
+    || refFiltro;
+
+  return registros.filter((item) => {
+    const matchRede = filtros.rede.value ? item.rede === filtros.rede.value : true;
+    const matchLoja = filtros.loja.value ? item.loja === filtros.loja.value : true;
+    const matchFormador = filtros.formador.value ? item.formador === filtros.formador.value : true;
+    const matchStatus = filtros.status.value ? item.status === filtros.status.value : true;
+    const matchRotina = filtros.rotina.value ? item.rotina === filtros.rotina.value : true;
+    const matchRegional = registroPertenceRegional(item);
+    const matchData = item.data === refReal;
+    return matchRede && matchLoja && matchFormador && matchStatus && matchRotina && matchRegional && matchData;
+  });
+}
+
+function atualizarAbaRotinasEmAtraso() {
+  const label = document.getElementById('tabLabelAtrasos');
+  if (!label) return;
+  const dadosDia = obterDadosResumoAtrasos();
+  const totalAtrasadas = dadosDia.filter((item) => item.status === 'realizada' && item.pontualidade === 'atrasada').length;
+  if (!dadosDia.length) {
+    label.textContent = 'Sem dados no dia';
+    return;
+  }
+  if (!totalAtrasadas) {
+    label.textContent = 'Sem atrasos no dia';
+    return;
+  }
+  label.textContent = `${formatarNumero.format(totalAtrasadas)} fora do horário`;
+}
+
+function abrirResumoAtrasos() {
+  aplicarPeriodoResumo('diario');
+  requestAnimationFrame(() => {
+    const painel = document.getElementById('rotinasForaHorarioDiario');
+    if (!painel) return;
+    painel.classList.remove('hidden');
+    painel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
+function renderRotinasForaHorarioDiario(dados) {
+  const painel = document.getElementById('rotinasForaHorarioDiario');
+  const tbody = document.getElementById('rotinasForaHorarioTabela');
+  if (!painel || !tbody) return;
+
+  if (resumoPeriodoAtual !== 'diario') {
+    painel.classList.add('hidden');
+    return;
+  }
+
+  const atrasadas = dados
+    .filter((item) => item.status === 'realizada' && item.pontualidade === 'atrasada')
+    .sort((a, b) => {
+      const horario = String(a.horarioFimPrevisto || '').localeCompare(String(b.horarioFimPrevisto || ''));
+      if (horario !== 0) return horario;
+      const unidade = String(a.loja || a.unidade || '').localeCompare(String(b.loja || b.unidade || ''), 'pt-BR');
+      if (unidade !== 0) return unidade;
+      return String(a.rotina || '').localeCompare(String(b.rotina || ''), 'pt-BR');
+    });
+
+  if (!atrasadas.length) {
+    tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state">Nenhuma rotina realizada fora do horário neste dia.</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = atrasadas.map((item) => `
+    <tr>
+      <td>${escaparHtml(item.loja || item.unidade || '')}</td>
+      <td>${escaparHtml(item.rotina || '')}</td>
+      <td>${escaparHtml(item.horarioFimPrevisto || '--')}</td>
+      <td>${escaparHtml(item.horaRealizada || '--')}</td>
+    </tr>`).join('');
+}
+
 function renderRankingFormadores(dados) {
   const tbody = document.getElementById('rankingFormadoresTabela');
   const agrupado = agregarPorFormador(dados);
@@ -2292,8 +2411,11 @@ function diferencaDiasInclusiva(inicioIso, fimIso) {
 }
 
 function obterDataAncoraCurva() {
+  const periodo = normalizarPeriodo(filtros.dataInicial?.value, filtros.dataFinal?.value);
+  const dataRealNoPeriodo = obterUltimaDataImportadaNoPeriodo(periodo.dataInicial, periodo.dataFinal);
   const datasResumo = resumosDiarios.map((item) => formatarData(item.latestDate)).filter(Boolean).sort();
-  return formatarData(filtros.dataFinal?.value)
+  return dataRealNoPeriodo
+    || formatarData(filtros.dataFinal?.value)
     || formatarData(filtros.dataInicial?.value)
     || datasResumo.at(-1)
     || ultimaDataDisponivel
@@ -2640,6 +2762,8 @@ function configurarCurvaExecucao() {
 function renderizarPainel() {
   dadosFiltrados = obterDadosFiltrados();
   atualizarKPIs(dadosFiltrados);
+  atualizarAbaRotinasEmAtraso();
+  renderRotinasForaHorarioDiario(dadosFiltrados);
   renderRankingFormadores(dadosFiltrados);
   renderPromotorDestaque(dadosFiltrados);
   renderRankingsPorFormador(dadosFiltrados);
@@ -3790,13 +3914,11 @@ async function importarArquivo() {
     await salvarConfigNoFirebase();
   }
 
-  persistirSnapshotsLocais();
+  compactarMemoriaOperacional();
   atualizarBasePorSnapshots(
-    `${totalPrevistas} rotinas previstas • ${totalRealizadas} realizadas • ${totalAtrasadas} em atraso • ${totalPendentes} pendentes.`
+    `${totalPrevistas} rotinas previstas • ${totalRealizadas} realizadas • ${totalAtrasadas} em atraso • ${totalPendentes} pendentes. O sistema liberou automaticamente os detalhes que não precisam permanecer na memória.`
   );
 
-  if (fileInput) fileInput.value = '';
-  previewsImportacao = [];
   renderizarPreviewImportacao();
   limparDadosBrutosExpirados();
 
@@ -4795,21 +4917,73 @@ function atualizarPendenciasHero(dados) {
   container.innerHTML = itens.map((item) => `<div class="hero-alert-item"><span class="hero-alert-bullet">⚠️</span><span><strong>${item.texto}</strong></span></div>`).join('');
 }
 
+function obterDatasImportadasDisponiveis() {
+  const datas = new Set();
+  resumosDiarios.forEach((item) => {
+    const data = formatarData(item?.latestDate);
+    if (data) datas.add(data);
+  });
+  [...snapshotsRecentes, ...snapshotsSobDemanda, ...snapshotsImportados].forEach((item) => {
+    const data = formatarData(item?.latestDate);
+    if (data) datas.add(data);
+  });
+  // A base detalhada pode ter dezenas de milhares de linhas. Só a percorre no modo simulado,
+  // quando ainda não existem resumos ou snapshots importados.
+  if (!datas.size) {
+    registros.forEach((item) => {
+      const data = formatarData(item?.data);
+      if (data) datas.add(data);
+    });
+  }
+  return [...datas].sort();
+}
+
+function obterUltimaDataImportadaNoPeriodo(dataInicial = '', dataFinal = '') {
+  const periodo = normalizarPeriodo(dataInicial, dataFinal);
+  const datas = obterDatasImportadasDisponiveis().filter((data) => {
+    if (periodo.dataInicial && data < periodo.dataInicial) return false;
+    if (periodo.dataFinal && data > periodo.dataFinal) return false;
+    return true;
+  });
+  return datas.at(-1) || '';
+}
+
+function obterPrimeiraDataImportadaNoPeriodo(dataInicial = '', dataFinal = '') {
+  const periodo = normalizarPeriodo(dataInicial, dataFinal);
+  const datas = obterDatasImportadasDisponiveis().filter((data) => {
+    if (periodo.dataInicial && data < periodo.dataInicial) return false;
+    if (periodo.dataFinal && data > periodo.dataFinal) return false;
+    return true;
+  });
+  return datas[0] || '';
+}
+
+function obterFimRealDoMes(ref = '') {
+  const dataRef = dataIsoParaDate(formatarData(ref));
+  if (!dataRef) return '';
+  const fmt = (data) => `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
+  const inicioMes = fmt(new Date(dataRef.getFullYear(), dataRef.getMonth(), 1));
+  const fimCalendario = fmt(new Date(dataRef.getFullYear(), dataRef.getMonth() + 1, 0));
+  return obterUltimaDataImportadaNoPeriodo(inicioMes, fimCalendario) || formatarData(ref);
+}
+
 function atualizarRotulosAbas() {
-  const inicio = formatarData(filtros.dataInicial?.value);
-  const fim = formatarData(filtros.dataFinal?.value);
-  const ref = fim || inicio || ultimaDataDisponivel || new Date().toISOString().slice(0, 10);
+  const inicioFiltro = formatarData(filtros.dataInicial?.value);
+  const fimFiltro = formatarData(filtros.dataFinal?.value);
+  const dataReal = obterUltimaDataImportadaNoPeriodo(inicioFiltro, fimFiltro);
+  const ref = dataReal || fimFiltro || inicioFiltro || ultimaDataDisponivel || new Date().toISOString().slice(0, 10);
+  const primeiroReal = obterPrimeiraDataImportadaNoPeriodo(inicioFiltro, fimFiltro);
+  const inicioEfetivo = primeiroReal || inicioFiltro || ref;
+  const fimEfetivo = dataReal || fimFiltro || ref;
   const dataRef = dataIsoParaDate(ref) || new Date();
-  const dataInicio = dataIsoParaDate(inicio || ref) || dataRef;
-  const dataFim = dataIsoParaDate(fim || ref) || dataRef;
+  const dataInicio = dataIsoParaDate(inicioEfetivo) || dataRef;
+  const dataFim = dataIsoParaDate(fimEfetivo) || dataRef;
   const diario = document.getElementById('tabLabelDiario');
   const semanal = document.getElementById('tabLabelSemanal');
   const mensal = document.getElementById('tabLabelMensal');
 
   if (diario) {
-    diario.textContent = inicio && fim && inicio !== fim
-      ? `${dataInicio.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })} a ${dataFim.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`
-      : `Data • ${dataRef.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}`;
+    diario.textContent = `Data • ${dataRef.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}`;
   }
   if (semanal) {
     semanal.textContent = `${dataInicio.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })} a ${dataFim.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`;
@@ -4818,39 +4992,47 @@ function atualizarRotulosAbas() {
     const mesmoMes = dataInicio.getFullYear() === dataFim.getFullYear() && dataInicio.getMonth() === dataFim.getMonth();
     mensal.textContent = mesmoMes
       ? dataFim.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-      : `Período personalizado`;
+      : 'Período personalizado';
   }
 }
 
 function aplicarPeriodoResumo(periodo) {
+  const painelAtrasos = document.getElementById('rotinasForaHorarioDiario');
+  if (painelAtrasos) painelAtrasos.classList.add('hidden');
   resumoPeriodoAtual = periodo;
-  const ref = formatarData(filtros.dataFinal?.value)
-    || formatarData(filtros.dataInicial?.value)
+  const periodoFiltro = normalizarPeriodo(filtros.dataInicial?.value, filtros.dataFinal?.value);
+  const refFiltro = periodoFiltro.dataFinal
+    || periodoFiltro.dataInicial
     || ultimaDataDisponivel
     || new Date().toISOString().slice(0, 10);
-  const base = new Date(`${ref}T00:00:00`);
+  const refReal = obterUltimaDataImportadaNoPeriodo(periodoFiltro.dataInicial, periodoFiltro.dataFinal)
+    || obterFimRealDoMes(refFiltro)
+    || refFiltro;
+  const base = new Date(`${refReal}T00:00:00`);
   const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   if (periodo === 'diario') {
-    filtros.dataInicial.value = ref;
-    filtros.dataFinal.value = ref;
+    filtros.dataInicial.value = refReal;
+    filtros.dataFinal.value = refReal;
   } else if (periodo === 'semanal') {
-    const ini = new Date(base); ini.setDate(base.getDate()-6);
-    filtros.dataInicial.value = fmt(ini);
-    filtros.dataFinal.value = ref;
+    const ini = new Date(base);
+    ini.setDate(base.getDate() - 6);
+    const inicioSemana = fmt(ini);
+    const primeiroDisponivel = obterPrimeiraDataImportadaNoPeriodo(inicioSemana, refReal) || inicioSemana;
+    filtros.dataInicial.value = primeiroDisponivel;
+    filtros.dataFinal.value = refReal;
   } else {
     const ini = new Date(base.getFullYear(), base.getMonth(), 1);
-    const fimMes = new Date(base.getFullYear(), base.getMonth() + 1, 0);
     filtros.dataInicial.value = fmt(ini);
-    filtros.dataFinal.value = fmt(fimMes);
+    filtros.dataFinal.value = refReal;
   }
-  document.querySelectorAll('.summary-tab').forEach((button) => button.classList.toggle('active', button.dataset.period === periodo));
+  document.querySelectorAll('.summary-tab[data-period]').forEach((button) => button.classList.toggle('active', button.dataset.period === periodo));
   atualizarRotulosAbas();
   renderizarPainel();
 }
 
 function configurarAbasResumo() {
   atualizarRotulosAbas();
-  document.querySelectorAll('.summary-tab').forEach((button) => {
+  document.querySelectorAll('.summary-tab[data-period]').forEach((button) => {
     button.addEventListener('click', () => aplicarPeriodoResumo(button.dataset.period));
   });
 }
@@ -4868,7 +5050,7 @@ function configurarSidebar() {
 
 function ativarResumoMensalSemSobrescreverDatas() {
   resumoPeriodoAtual = 'mensal';
-  document.querySelectorAll('.summary-tab').forEach((button) => {
+  document.querySelectorAll('.summary-tab[data-period]').forEach((button) => {
     button.classList.toggle('active', button.dataset.period === 'mensal');
   });
 }
@@ -4897,8 +5079,10 @@ function configurarEventos() {
   document.getElementById('clearFilters').addEventListener('click', () => { limparFiltros(); document.body.classList.remove('sidebar-open'); });
   const importButton = document.getElementById('importFile');
   const resetButton = document.getElementById('resetData');
+  const optimizeButton = document.getElementById('optimizeMemory');
   if (importButton) importButton.addEventListener('click', importarArquivo);
   if (resetButton) resetButton.addEventListener('click', resetarParaSimulada);
+  if (optimizeButton) optimizeButton.addEventListener('click', otimizarSistemaAgora);
   if (fileInput) {
     fileInput.addEventListener('change', () => {
       montarPreviewArquivos();
@@ -4938,6 +5122,7 @@ window.PainelSF = Object.assign(window.PainelSF || {}, {
     document.body.classList.remove('admin-mode');
   },
   aplicarPeriodoResumo,
+  abrirResumoAtrasos,
   selecionarRegionalDashboard,
   abrirApresentacao,
   fecharApresentacao,

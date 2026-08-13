@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20260729-variacoes-historicas-v11" />
+  <link rel="stylesheet" href="style.css?v=20260729-data-real-modo-leve-v12" />
 </head>
 <body>
   <div class="app-shell">
@@ -105,6 +105,19 @@
       <main class="dashboard">
 
       
+
+      <section class="summary-tabs-shell summary-highlight-shell">
+        <div class="summary-tabs summary-tabs-single">
+          <button id="summaryLateTab" class="summary-tab summary-tab-alert" type="button" onclick="window.PainelSF && window.PainelSF.abrirResumoAtrasos()">
+            <span class="summary-tab-icon">⏰</span>
+            <span class="summary-tab-copy">
+              <strong>Rotinas em atraso</strong>
+              <small id="tabLabelAtrasos">Sem atrasos no dia</small>
+            </span>
+          </button>
+        </div>
+      </section>
+
       <section class="summary-tabs-shell">
         <div class="summary-tabs">
           <button class="summary-tab active" data-period="diario" type="button" onclick="window.PainelSF && window.PainelSF.aplicarPeriodoResumo('diario')">
@@ -204,6 +217,28 @@
           <p>Total de rotinas não concluídas</p>
           <div class="hero-alert-list" id="painelPendencias"></div>
         </article>
+      </section>
+
+      <section class="panel hidden" id="rotinasForaHorarioDiario" aria-labelledby="rotinasForaHorarioTitle">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Atenção</span>
+            <h2 id="rotinasForaHorarioTitle">Rotinas realizadas fora do horário</h2>
+          </div>
+        </div>
+        <div class="table-shell">
+          <table>
+            <thead>
+              <tr>
+                <th>Unidade</th>
+                <th>Rotina</th>
+                <th>Horário previsto</th>
+                <th>Horário realizado</th>
+              </tr>
+            </thead>
+            <tbody id="rotinasForaHorarioTabela"></tbody>
+          </table>
+        </div>
       </section>
 
       <section class="panel execution-curve-panel" id="executionCurvePanel" aria-labelledby="executionCurveTitle">
@@ -628,7 +663,8 @@
 
             <section class="admin-tab-panel" data-panel="configuracoes">
               <div class="admin-grid two-cols">
-                <article class="admin-block"><span class="eyebrow">Armazenamento</span><h3>Política de dados</h3><div class="admin-settings-list"><div><strong>Dados brutos</strong><span>Excluídos automaticamente após 5 dias.</span></div><div><strong>Detalhes recentes</strong><span>Até 45 dias carregados na abertura.</span></div><div><strong>Resumos históricos</strong><span>Até 370 dias mantidos para consultas leves.</span></div></div></article>
+                <article class="admin-block"><span class="eyebrow">Armazenamento</span><h3>Política de dados</h3><div class="admin-settings-list"><div><strong>Dados brutos</strong><span>Excluídos automaticamente após 5 dias.</span></div><div><strong>Detalhes recentes</strong><span>Somente os 7 dias mais recentes ficam carregados na abertura.</span></div><div><strong>Resumos históricos</strong><span>Até 740 dias permanecem disponíveis para gráficos e comparações leves.</span></div><div><strong>Datas antigas</strong><span>Os detalhes continuam salvos e são carregados apenas quando consultados.</span></div></div></article>
+                <article class="admin-block"><span class="eyebrow">Desempenho</span><h3>Liberar memória</h3><p class="admin-summary">Remove da memória os detalhes antigos já salvos, preservando todo o histórico no Firebase. O painel volta para a última data importada.</p><button id="optimizeMemory" class="btn btn-primary" type="button">Otimizar sistema agora</button><div id="memoryOptimizationFeedback" class="admin-feedback"></div></article>
                 <article class="admin-block admin-danger-zone"><span class="eyebrow">Ação crítica</span><h3>Limpar dados do painel</h3><p class="admin-summary">Remove todas as importações e resultados armazenados. As configurações de lojas, regionais e rotinas são preservadas.</p><button id="resetData" class="btn btn-danger" type="button">Limpar painel</button></article>
               </div>
             </section>
@@ -676,7 +712,7 @@
   <div id="importBadge" class="hidden"></div>
   <table class="hidden"><tbody id="tabelaResumoPromotores"></tbody></table>
 
-  <script src="script.js?v=20260729-variacoes-historicas-v11" defer></script>
+  <script src="script.js?v=20260813-rotinas-fora-horario-v1" defer></script>
 
 
 <script>
