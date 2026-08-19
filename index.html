@@ -105,6 +105,18 @@
       <main class="dashboard">
 
       
+      <section class="summary-tabs-shell summary-highlight-shell" aria-label="Acessos rápidos">
+        <div class="summary-tabs summary-tabs-single">
+          <button id="summaryLateTab" class="summary-tab summary-tab-alert" type="button" onclick="window.PainelSF && window.PainelSF.abrirResumoAtrasos()">
+            <span class="summary-tab-icon">⏰</span>
+            <span class="summary-tab-copy">
+              <strong>Rotinas em atraso</strong>
+              <small id="tabLabelAtrasos">Sem atrasos no dia</small>
+            </span>
+          </button>
+        </div>
+      </section>
+
       <section class="summary-tabs-shell">
         <div class="summary-tabs">
           <button class="summary-tab active" data-period="diario" type="button" onclick="window.PainelSF && window.PainelSF.aplicarPeriodoResumo('diario')">
@@ -128,6 +140,30 @@
               <small id="tabLabelMensal">Mês atual</small>
             </span>
           </button>
+        </div>
+      </section>
+
+      <section class="panel hidden late-routines-panel" id="rotinasForaHorarioDiario" aria-labelledby="rotinasForaHorarioTitle">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Atenção</span>
+            <h2 id="rotinasForaHorarioTitle">Rotinas realizadas fora do horário</h2>
+            <p class="late-routines-helper">A lista só é exibida quando você abre “Rotinas em atraso”.</p>
+          </div>
+          <button id="closeLateRoutines" class="btn btn-secondary btn-compact" type="button" onclick="window.PainelSF && window.PainelSF.fecharResumoAtrasos()">Fechar</button>
+        </div>
+        <div class="table-shell">
+          <table>
+            <thead>
+              <tr>
+                <th>Unidade</th>
+                <th>Rotina</th>
+                <th>Horário previsto</th>
+                <th>Horário realizado</th>
+              </tr>
+            </thead>
+            <tbody id="rotinasForaHorarioTabela"></tbody>
+          </table>
         </div>
       </section>
 
@@ -441,6 +477,7 @@
             <button class="admin-tab" data-tab="unidades" type="button"><span>▤</span><div><strong>Unidades</strong><small>Cadastro operacional</small></div></button>
             <button class="admin-tab" data-tab="rotinas" type="button"><span>✓</span><div><strong>Rotinas</strong><small>Horários e tolerâncias</small></div></button>
             <button class="admin-tab" data-tab="vinculos" type="button"><span>♙</span><div><strong>Equipe</strong><small>Formadores por loja</small></div></button>
+            <button class="admin-tab" data-tab="ferias" type="button"><span>☀</span><div><strong>Férias</strong><small>Promotores por mês</small></div></button>
             <button class="admin-tab" data-tab="nomes" type="button"><span>✎</span><div><strong>Nomes</strong><small>Padronização das lojas</small></div></button>
             <button class="admin-tab" data-tab="historico" type="button"><span>◷</span><div><strong>Histórico</strong><small>Importações processadas</small></div></button>
             <button class="admin-tab" data-tab="configuracoes" type="button"><span>⚙</span><div><strong>Configurações</strong><small>Sistema e armazenamento</small></div></button>
@@ -612,6 +649,27 @@
               <div class="admin-grid two-cols">
                 <div class="admin-block"><span class="eyebrow">Equipe</span><h3>Vincular loja ao formador</h3><div class="stack-fields"><label class="field"><span>Loja</span><select id="adminLojaSelect"></select></label><label class="field"><span>Formador</span><select id="adminFormadorSelect"></select></label><button id="saveLojaVinculo" class="btn btn-primary" type="button">Salvar vínculo</button></div><div id="linkFeedback" class="admin-feedback"></div></div>
                 <div class="admin-block"><span class="eyebrow">Vínculos atuais</span><h3>Responsáveis por unidade</h3><div id="vinculosLista" class="admin-scroll-list"></div></div>
+              </div>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="ferias">
+              <div class="admin-grid two-cols vacation-admin-grid">
+                <article class="admin-block vacation-config-card">
+                  <span class="eyebrow">Férias de promotores</span>
+                  <h3>Retirar promotor das rotinas do mês</h3>
+                  <p class="admin-summary">Ao cadastrar um promotor em férias, as rotinas atribuídas a ele deixam de entrar nas previstas, realizadas, pendências e percentuais daquele mês. Se outro promotor executar a rotina na unidade, a execução continua sendo contabilizada normalmente.</p>
+                  <div class="stack-fields vacation-fields">
+                    <label class="field"><span>Mês de referência</span><input id="vacationMonth" type="month" /></label>
+                    <label class="field"><span>Promotor</span><input id="vacationPromoter" type="text" list="vacationPromotersList" placeholder="Digite ou selecione o promotor" autocomplete="off" /></label>
+                    <datalist id="vacationPromotersList"></datalist>
+                    <button id="addVacationPromoter" class="btn btn-primary" type="button">Adicionar férias</button>
+                  </div>
+                  <div id="vacationFeedback" class="admin-feedback"></div>
+                </article>
+                <article class="admin-block vacation-list-card">
+                  <div class="section-head compact-head"><div><span class="eyebrow">Férias cadastradas</span><h3>Promotores fora da contabilização</h3><p class="admin-summary">Os registros permanecem salvos por competência mensal e podem ser removidos a qualquer momento.</p></div></div>
+                  <div id="vacationList" class="admin-scroll-list vacation-list"></div>
+                </article>
               </div>
             </section>
 

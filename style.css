@@ -3425,3 +3425,66 @@ body.admin-mode { overflow: hidden; }
 @media (max-width: 700px) {
   .preview-variation-item { grid-template-columns: 1fr; gap: 4px; }
 }
+
+
+/* Acesso rápido: rotinas executadas fora do horário */
+.summary-highlight-shell {
+  padding-top: 6px;
+  padding-bottom: 2px;
+  border-bottom: none;
+}
+.summary-tabs.summary-tabs-single {
+  grid-template-columns: minmax(0, 360px);
+  justify-content: flex-start;
+}
+.summary-tab.summary-tab-alert {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: linear-gradient(135deg, rgba(75, 48, 10, 0.74), rgba(20, 20, 24, 0.94));
+}
+.summary-tab.summary-tab-alert:hover,
+.summary-tab.summary-tab-alert.has-late {
+  border-color: rgba(245, 158, 11, 0.48);
+}
+.summary-tab.summary-tab-alert.active {
+  border-color: rgba(245, 158, 11, 0.58);
+  background: linear-gradient(135deg, rgba(105, 65, 8, 0.88), rgba(27, 23, 17, 0.96));
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.10), 0 18px 44px rgba(0,0,0,0.34);
+}
+.summary-tab.summary-tab-alert.active::after {
+  background: linear-gradient(90deg, #d97706, #fbbf24);
+  box-shadow: 0 0 18px rgba(245,158,11,0.40);
+}
+.summary-tab.summary-tab-alert .summary-tab-copy small { color: #d4d4d8; }
+.summary-tab.summary-tab-alert.has-late .summary-tab-copy small { color: #fbbf24; font-weight: 700; }
+.late-routines-panel {
+  border-color: rgba(245, 158, 11, 0.20);
+}
+.late-routines-helper {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* ADM: férias de promotores */
+.vacation-admin-grid { align-items: start; }
+.vacation-fields { margin-top: 18px; }
+.vacation-list { max-height: 520px; overflow: auto; }
+.vacation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.025);
+}
+.vacation-row > div { display: grid; gap: 5px; min-width: 0; }
+.vacation-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vacation-row span { color: var(--muted); font-size: 0.88rem; text-transform: capitalize; }
+
+@media (max-width: 760px) {
+  .summary-tabs.summary-tabs-single { grid-template-columns: 1fr; }
+  .vacation-row { grid-template-columns: 1fr; }
+  .vacation-row .btn { width: 100%; }
+}

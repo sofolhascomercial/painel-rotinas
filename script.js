@@ -27,6 +27,7 @@ let firebaseResumosRecebidos = false;
 let aplicarEstadoRemotoTimer = null;
 let resumoPeriodoAtual = 'diario';
 let curvaPeriodoAtual = '30d';
+let painelAtrasosAberto = false;
 
 const APRESENTACAO_CONFIG = {
   intervaloMs: 10000
@@ -43,6 +44,7 @@ const STORAGE_KEYS = {
   adminLogged: 'sf_admin_logged',
   storeFormadorMap: 'sf_store_formador_map',
   storePromotorMap: 'sf_store_promotor_map',
+  promoterVacations: 'sf_promoter_vacations',
   storeRegionalMap: 'sf_store_regional_map',
   regionalMapReviewed: 'sf_regional_map_reviewed',
   storeRenameMap: 'sf_store_rename_map',
@@ -439,6 +441,7 @@ migrarArmazenamentoSeNecessario();
 
 let lojaFormadorMap = sanitizarMapaFormadores({ ...defaultLojaFormadorMap, ...normalizarMapaChaves(carregarStore(STORAGE_KEYS.storeFormadorMap, {})) });
 let lojaPromotorMap = normalizarMapaChaves(carregarStore(STORAGE_KEYS.storePromotorMap, {}));
+let promotoresFeriasPorMes = normalizarFeriasPromotores(carregarStore(STORAGE_KEYS.promoterVacations, {}));
 let lojaRegionalMap = sanitizarMapaRegionais({ ...defaultLojaRegionalMap, ...carregarStore(STORAGE_KEYS.storeRegionalMap, {}) });
 let regionalSelecionada = 'geral';
 let regionalMapRevisado = localStorage.getItem(STORAGE_KEYS.regionalMapReviewed) === '1';
@@ -645,7 +648,7 @@ function otimizarSistemaAgora() {
     filtros.dataInicial.value = ultima;
     filtros.dataFinal.value = ultima;
     resumoPeriodoAtual = 'diario';
-    document.querySelectorAll('.summary-tab').forEach((button) => button.classList.toggle('active', button.dataset.period === 'diario'));
+    document.querySelectorAll('.summary-tab[data-period]').forEach((button) => button.classList.toggle('active', button.dataset.period === 'diario'));
   }
   atualizarBasePorSnapshots('Memória otimizada. Somente os 7 dias mais recentes permanecem carregados; datas antigas continuam salvas e são abertas sob demanda.');
   renderizarPreviewImportacao();
@@ -705,6 +708,7 @@ async function salvarConfigNoFirebase() {
       appVersion: APP_STORAGE_VERSION,
       storeFormadorMap: sanitizarMapaFormadores(lojaFormadorMap),
       storePromotorMap: lojaPromotorMap,
+      promoterVacationMap: promotoresFeriasPorMes,
       storeRegionalMap: sanitizarMapaRegionais(lojaRegionalMap),
       regionalMapReviewed: regionalMapRevisado,
       storeRenameMap: lojaRenameMap,
@@ -1036,6 +1040,7 @@ function iniciarFirebaseSync() {
       ...normalizarMapaChaves(remoto.storeFormadorMap || lojaFormadorMap)
     });
     lojaPromotorMap = normalizarMapaChaves(remoto.storePromotorMap || lojaPromotorMap);
+    promotoresFeriasPorMes = normalizarFeriasPromotores(remoto.promoterVacationMap || promotoresFeriasPorMes);
     lojaRegionalMap = sanitizarMapaRegionais({ ...defaultLojaRegionalMap, ...(remoto.storeRegionalMap || lojaRegionalMap) });
     if (typeof remoto.regionalMapReviewed === 'boolean') regionalMapRevisado = remoto.regionalMapReviewed;
     lojaRenameMap = normalizarMapaChaves({
@@ -1047,6 +1052,7 @@ function iniciarFirebaseSync() {
 
     salvarStore(STORAGE_KEYS.storeFormadorMap, lojaFormadorMap);
     salvarStore(STORAGE_KEYS.storePromotorMap, lojaPromotorMap);
+    salvarStore(STORAGE_KEYS.promoterVacations, promotoresFeriasPorMes);
     salvarStore(STORAGE_KEYS.storeRegionalMap, lojaRegionalMap);
     localStorage.setItem(STORAGE_KEYS.regionalMapReviewed, regionalMapRevisado ? '1' : '0');
     salvarStore(STORAGE_KEYS.storeRenameMap, lojaRenameMap);
@@ -1586,6 +1592,88 @@ function resolverFormador(loja, formadorPlanilha = '', mapaPlanilha = new Map())
   return normalizarNomeFormador(candidato) || 'Não informado';
 }
 
+
+function normalizarCompetenciaFerias(valor = '') {
+  const texto = String(valor || '').trim();
+  return /^\d{4}-\d{2}$/.test(texto) ? texto : '';
+}
+
+function normalizarFeriasPromotores(mapa = {}) {
+  const saida = {};
+  if (!mapa || typeof mapa !== 'object' || Array.isArray(mapa)) return saida;
+  Object.entries(mapa).forEach(([competenciaBruta, nomes]) => {
+    const competencia = normalizarCompetenciaFerias(competenciaBruta);
+    if (!competencia || !Array.isArray(nomes)) return;
+    const unicos = new Map();
+    nomes.forEach((nome) => {
+      const limpo = String(nome || '').trim().replace(/\s+/g, ' ');
+      const chave = slug(limpo);
+      if (chave && !unicos.has(chave)) unicos.set(chave, limpo);
+    });
+    const lista = [...unicos.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    if (lista.length) saida[competencia] = lista;
+  });
+  return saida;
+}
+
+function competenciaDaData(dataIso = '') {
+  const data = formatarData(dataIso);
+  return data ? data.slice(0, 7) : '';
+}
+
+function promotorEstaDeFerias(promotor = '', dataIso = '') {
+  const competencia = competenciaDaData(dataIso);
+  const chave = slug(promotor);
+  if (!competencia || !chave) return false;
+  return (promotoresFeriasPorMes[competencia] || []).some((nome) => slug(nome) === chave);
+}
+
+function formatarCompetenciaFerias(competencia = '') {
+  const match = normalizarCompetenciaFerias(competencia).match(/^(\d{4})-(\d{2})$/);
+  if (!match) return competencia;
+  return new Date(Number(match[1]), Number(match[2]) - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+}
+
+function obterPromotoresConhecidos() {
+  const nomes = new Map();
+  const adicionar = (valor) => {
+    const nome = String(valor || '').trim().replace(/\s+/g, ' ');
+    const chave = slug(nome);
+    if (!chave) return;
+    if (LOJAS_ATIVAS.some((loja) => slug(loja.nome) === chave)) return;
+    if (!nomes.has(chave)) nomes.set(chave, nome);
+  };
+  Object.values(lojaPromotorMap || {}).forEach(adicionar);
+  registrosBase.forEach((item) => { adicionar(item.promotor); adicionar(item.autor); });
+  try { obterRespostasPersistidas().forEach((item) => { adicionar(item.promotor); adicionar(item.autor); }); } catch (error) { /* base ainda não pronta */ }
+  Object.values(promotoresFeriasPorMes).flat().forEach(adicionar);
+  return [...nomes.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+
+function inferirMapaPromotoresPorRespostas(respostas = []) {
+  const contagens = new Map();
+  respostas.forEach((item) => {
+    const lojaAtiva = resolverLojaAtiva(item?.loja, item?.codigoUnidade);
+    const loja = lojaAtiva?.nome || item?.loja || '';
+    const promotor = String(item?.promotor || item?.autor || '').trim();
+    const chaveLoja = slug(loja);
+    const chavePromotor = slug(promotor);
+    if (!chaveLoja || !chavePromotor) return;
+    if (!contagens.has(chaveLoja)) contagens.set(chaveLoja, new Map());
+    const mapa = contagens.get(chaveLoja);
+    const atual = mapa.get(chavePromotor) || { nome: promotor, total: 0 };
+    atual.total += 1;
+    mapa.set(chavePromotor, atual);
+  });
+  const resultado = new Map();
+  contagens.forEach((mapa, chaveLoja) => {
+    const principal = [...mapa.values()].sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome, 'pt-BR'))[0];
+    if (principal?.nome) resultado.set(chaveLoja, principal.nome);
+  });
+  return resultado;
+}
+
 function resolverPromotor(loja, promotorPlanilha = '', mapaPromotores = new Map()) {
   const lojaNormalizada = renomearLojaSeNecessario(loja);
   const chave = slug(lojaNormalizada);
@@ -1796,6 +1884,76 @@ function agregarLojasPorFormador(dados) {
     acc[item.formador].push(item);
     return acc;
   }, {});
+}
+
+
+function obterDadosResumoAtrasos() {
+  const periodoFiltro = normalizarPeriodo(filtros.dataInicial?.value, filtros.dataFinal?.value);
+  const refFiltro = periodoFiltro.dataFinal
+    || periodoFiltro.dataInicial
+    || ultimaDataDisponivel
+    || new Date().toISOString().slice(0, 10);
+  const refReal = obterUltimaDataImportadaNoPeriodo(periodoFiltro.dataInicial, periodoFiltro.dataFinal)
+    || obterFimRealDoMes(refFiltro)
+    || refFiltro;
+
+  return registros.filter((item) => {
+    const matchRede = filtros.rede.value ? item.rede === filtros.rede.value : true;
+    const matchLoja = filtros.loja.value ? item.loja === filtros.loja.value : true;
+    const matchFormador = filtros.formador.value ? item.formador === filtros.formador.value : true;
+    const matchRotina = filtros.rotina.value ? item.rotina === filtros.rotina.value : true;
+    const matchRegional = registroPertenceRegional(item);
+    return item.data === refReal && matchRede && matchLoja && matchFormador && matchRotina && matchRegional;
+  });
+}
+
+function atualizarAbaRotinasEmAtraso() {
+  const tab = document.getElementById('summaryLateTab');
+  const label = document.getElementById('tabLabelAtrasos');
+  if (!tab || !label) return;
+  const total = obterDadosResumoAtrasos().filter((item) => item.status === 'realizada' && item.pontualidade === 'atrasada').length;
+  label.textContent = total ? `${formatarNumero.format(total)} fora do horário` : 'Sem atrasos no dia';
+  tab.classList.toggle('has-late', total > 0);
+  tab.classList.toggle('active', painelAtrasosAberto);
+}
+
+function renderRotinasForaHorarioDiario() {
+  const painel = document.getElementById('rotinasForaHorarioDiario');
+  const tbody = document.getElementById('rotinasForaHorarioTabela');
+  if (!painel || !tbody) return;
+
+  painel.classList.toggle('hidden', !painelAtrasosAberto);
+  if (!painelAtrasosAberto) return;
+
+  const atrasadas = obterDadosResumoAtrasos()
+    .filter((item) => item.status === 'realizada' && item.pontualidade === 'atrasada')
+    .sort((a, b) => {
+      const horario = String(a.horarioFimPrevisto || '').localeCompare(String(b.horarioFimPrevisto || ''));
+      if (horario !== 0) return horario;
+      const unidade = String(a.loja || a.unidade || '').localeCompare(String(b.loja || b.unidade || ''), 'pt-BR');
+      if (unidade !== 0) return unidade;
+      return String(a.rotina || '').localeCompare(String(b.rotina || ''), 'pt-BR');
+    });
+
+  tbody.innerHTML = atrasadas.length
+    ? atrasadas.map((item) => `<tr><td>${escaparHtml(item.loja || item.unidade || '')}</td><td>${escaparHtml(item.rotina || '')}</td><td>${escaparHtml(item.horarioFimPrevisto || '--')}</td><td>${escaparHtml(item.horaRealizada || '--')}</td></tr>`).join('')
+    : '<tr><td colspan="4"><div class="empty-state">Nenhuma rotina realizada fora do horário neste dia.</div></td></tr>';
+}
+
+function abrirResumoAtrasos() {
+  if (painelAtrasosAberto) {
+    painelAtrasosAberto = false;
+    renderizarPainel();
+    return;
+  }
+  painelAtrasosAberto = true;
+  aplicarPeriodoResumo('diario', true);
+  requestAnimationFrame(() => document.getElementById('rotinasForaHorarioDiario')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+}
+
+function fecharResumoAtrasos() {
+  painelAtrasosAberto = false;
+  renderizarPainel();
 }
 
 function renderRankingFormadores(dados) {
@@ -2680,6 +2838,8 @@ function configurarCurvaExecucao() {
 function renderizarPainel() {
   dadosFiltrados = obterDadosFiltrados();
   atualizarKPIs(dadosFiltrados);
+  atualizarAbaRotinasEmAtraso();
+  renderRotinasForaHorarioDiario();
   renderRankingFormadores(dadosFiltrados);
   renderPromotorDestaque(dadosFiltrados);
   renderRankingsPorFormador(dadosFiltrados);
@@ -3096,6 +3256,7 @@ function obterRespostasAnteriores(data) {
 }
 
 function gerarResultadosBaseParaData(data, respostasInformadas = []) {
+  const mapaPromotoresRespostas = inferirMapaPromotoresPorRespostas(respostasInformadas);
   const respostas = mesclarRespostas(respostasInformadas.filter((item) => item.data === data));
   const lojas = obterLojasConhecidas();
   const mapaRespostas = new Map(respostas.map((item) => [chaveResposta(item.data, item.loja, item.rotinaId), item]));
@@ -3120,6 +3281,8 @@ function gerarResultadosBaseParaData(data, respostasInformadas = []) {
       const lojaAtiva = resolverLojaAtiva(loja);
       const lojaNormalizada = lojaAtiva?.nome || loja;
       const lojaInfo = parseLoja(lojaNormalizada);
+      const promotorResultado = resposta?.promotor || resposta?.autor || resolverPromotor(lojaInfo.loja, '', mapaPromotoresRespostas);
+      if (promotorEstaDeFerias(promotorResultado, data)) return;
 
       resultados.push({
         id: `resultado-${data}-${slug(lojaNormalizada)}-${rotina.id}`,
@@ -3131,7 +3294,7 @@ function gerarResultadosBaseParaData(data, respostasInformadas = []) {
         regional: resolverRegional(lojaNormalizada, lojaAtiva?.codigo).id,
         regionalNome: resolverRegional(lojaNormalizada, lojaAtiva?.codigo).nome,
         formador: resolverFormador(lojaInfo.loja),
-        promotor: resposta?.promotor || resposta?.autor || resolverPromotor(lojaInfo.loja),
+        promotor: promotorResultado,
         autor: resposta?.autor || '',
         rotina: rotina.nome,
         rotinaId: rotina.id,
@@ -4290,6 +4453,205 @@ async function salvarRegionaisAdmin() {
   if (feedback) feedback.textContent = sincronizado || !firebaseDisponivel ? 'Regionais salvas com sucesso.' : 'Regionais salvas neste dispositivo, mas a sincronização online falhou.';
 }
 
+
+function obterCompetenciaFeriasPadrao() {
+  const referencia = formatarData(filtros.dataFinal?.value) || ultimaDataDisponivel || dataLocalIso();
+  return referencia ? referencia.slice(0, 7) : dataLocalIso().slice(0, 7);
+}
+
+function renderFeriasPromotoresAdmin() {
+  const inputMes = document.getElementById('vacationMonth');
+  const datalist = document.getElementById('vacationPromotersList');
+  const lista = document.getElementById('vacationList');
+  if (inputMes && !inputMes.value) inputMes.value = obterCompetenciaFeriasPadrao();
+  if (datalist) datalist.innerHTML = obterPromotoresConhecidos().map((nome) => `<option value="${escaparHtml(nome)}"></option>`).join('');
+  if (!lista) return;
+
+  const registrosFerias = Object.entries(promotoresFeriasPorMes)
+    .flatMap(([competencia, nomes]) => nomes.map((nome) => ({ competencia, nome })))
+    .sort((a, b) => b.competencia.localeCompare(a.competencia) || a.nome.localeCompare(b.nome, 'pt-BR'));
+
+  if (!registrosFerias.length) {
+    lista.innerHTML = '<div class="empty-state">Nenhum promotor cadastrado em férias.</div>';
+    return;
+  }
+
+  lista.innerHTML = registrosFerias.map((item) => `<div class="vacation-row"><div><strong>${escaparHtml(item.nome)}</strong><span>${escaparHtml(formatarCompetenciaFerias(item.competencia))}</span></div><button class="btn btn-secondary btn-compact" type="button" data-vacation-remove="${escaparHtml(item.competencia)}" data-vacation-promoter="${escaparHtml(item.nome)}">Remover</button></div>`).join('');
+}
+
+function atualizarResumoLocalFerias(snapshotId, data, summary, total) {
+  const aplicar = (item) => item?.id === snapshotId ? { ...item, summary, total, updatedAt: new Date().toISOString() } : item;
+  resumosDiarios = resumosDiarios.map(aplicar);
+  if (!resumosDiarios.some((item) => item?.id === snapshotId)) {
+    resumosDiarios.push(normalizarResumoDiario({ id: snapshotId, latestDate: data, summary, total, responsesCount: summary.realizadas || 0 }));
+  }
+  snapshotsRecentes = snapshotsRecentes.map(aplicar);
+  snapshotsSobDemanda = snapshotsSobDemanda.map(aplicar);
+  recomporSnapshotsAtivos();
+}
+
+async function reprocessarCompetenciaFerias(competencia) {
+  const match = normalizarCompetenciaFerias(competencia).match(/^(\d{4})-(\d{2})$/);
+  if (!match) return { processados: 0, online: false };
+  const ano = Number(match[1]);
+  const mes = Number(match[2]);
+  const inicio = `${match[1]}-${match[2]}-01`;
+  const ultimoDia = new Date(ano, mes, 0).getDate();
+  const fim = `${match[1]}-${match[2]}-${String(ultimoDia).padStart(2, '0')}`;
+  let metas = obterHistoricoLeve().filter((item) => item.latestDate >= inicio && item.latestDate <= fim);
+  let online = false;
+
+  if (firebaseDisponivel && firebaseApi && snapshotsCollectionRef) {
+    try {
+      const consulta = firebaseApi.query(
+        snapshotsCollectionRef,
+        firebaseApi.where('latestDate', '>=', inicio),
+        firebaseApi.where('latestDate', '<=', fim),
+        firebaseApi.orderBy('latestDate', 'asc'),
+        firebaseApi.limit(35)
+      );
+      const resultado = await firebaseApi.getDocs(consulta);
+      metas = resultado.docs.map((docItem) => normalizarSnapshotFirebase({ id: docItem.id, ...docItem.data() })).filter(Boolean);
+      online = true;
+    } catch (error) {
+      console.error('Erro ao buscar mês para recalcular férias:', error);
+    }
+  }
+
+  let processados = 0;
+  for (const meta of metas) {
+    const data = formatarData(meta.latestDate);
+    if (!data) continue;
+    let dados = [];
+    const carregado = snapshotsImportados.find((item) => item.id === meta.id && Array.isArray(item.data));
+    if (carregado) dados = carregado.data;
+    else if (online) {
+      try { dados = await carregarDadosSnapshotNoFirebase(meta); } catch (error) { console.error(`Erro ao carregar ${meta.id} para férias:`, error); }
+    }
+    if (!Array.isArray(dados) || !dados.length) continue;
+    const respostas = dados.map(normalizarRespostaPersistida).filter(Boolean);
+    const gerado = gerarResultadosBaseParaData(data, respostas);
+    const summary = resumirResultadosImportacao(gerado.resultados);
+    atualizarResumoLocalFerias(meta.id, data, summary, gerado.resultados.length);
+    if (online) {
+      try {
+        await firebaseApi.setDoc(firebaseApi.doc(db, 'painel_snapshots', meta.id), {
+          summary,
+          total: gerado.resultados.length,
+          vacationRecalculatedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (error) {
+        console.error(`Erro ao salvar resumo recalculado ${meta.id}:`, error);
+      }
+    }
+    processados += 1;
+  }
+  persistirResumosLocais();
+  persistirSnapshotsLocais();
+  invalidarCacheDados();
+  return { processados, online };
+}
+
+
+async function inferirVinculosPromotorHistoricoAdmin(promotor, competencia) {
+  const alvo = slug(promotor);
+  const match = normalizarCompetenciaFerias(competencia).match(/^(\d{4})-(\d{2})$/);
+  if (!alvo || !match) return 0;
+  const inicioMes = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+  const inicioBuscaDate = new Date(inicioMes);
+  inicioBuscaDate.setDate(inicioBuscaDate.getDate() - 60);
+  const fimBuscaDate = new Date(Number(match[1]), Number(match[2]), 0);
+  const inicioBusca = dataLocalParaIso(inicioBuscaDate);
+  const fimBusca = dataLocalParaIso(fimBuscaDate);
+  const lojas = new Set();
+
+  const coletar = (dados = []) => {
+    dados.forEach((item) => {
+      const autor = String(item?.promotor || item?.autor || '').trim();
+      if (slug(autor) !== alvo) return;
+      const lojaAtiva = resolverLojaAtiva(item?.loja, item?.codigoUnidade);
+      if (lojaAtiva?.nome) lojas.add(lojaAtiva.nome);
+    });
+  };
+
+  try { coletar(obterRespostasPersistidas().filter((item) => item.data >= inicioBusca && item.data <= fimBusca)); } catch (error) { /* sem detalhes locais */ }
+
+  if (firebaseDisponivel && firebaseApi && snapshotsCollectionRef) {
+    try {
+      const consulta = firebaseApi.query(
+        snapshotsCollectionRef,
+        firebaseApi.where('latestDate', '>=', inicioBusca),
+        firebaseApi.where('latestDate', '<=', fimBusca),
+        firebaseApi.orderBy('latestDate', 'desc'),
+        firebaseApi.limit(90)
+      );
+      const resultado = await firebaseApi.getDocs(consulta);
+      const metas = resultado.docs.map((docItem) => normalizarSnapshotFirebase({ id: docItem.id, ...docItem.data() })).filter(Boolean);
+      const completos = await carregarSnapshotsEmLotes(metas);
+      completos.forEach((snapshot) => coletar(snapshot.data));
+    } catch (error) {
+      console.error('Erro ao inferir unidades do promotor em férias:', error);
+    }
+  }
+
+  let novos = 0;
+  lojas.forEach((loja) => {
+    const chave = slug(loja);
+    if (!lojaPromotorMap[chave]) {
+      lojaPromotorMap[chave] = promotor;
+      novos += 1;
+    }
+  });
+  if (novos) salvarStore(STORAGE_KEYS.storePromotorMap, lojaPromotorMap);
+  return novos;
+}
+
+async function salvarFeriasPromotorAdmin() {
+  const mesInput = document.getElementById('vacationMonth');
+  const promotorInput = document.getElementById('vacationPromoter');
+  const feedback = document.getElementById('vacationFeedback');
+  const competencia = normalizarCompetenciaFerias(mesInput?.value);
+  const promotor = String(promotorInput?.value || '').trim().replace(/\s+/g, ' ');
+  if (!competencia || !promotor) {
+    if (feedback) feedback.textContent = 'Selecione o mês e informe o promotor.';
+    return;
+  }
+  const atuais = promotoresFeriasPorMes[competencia] || [];
+  if (atuais.some((nome) => slug(nome) === slug(promotor))) {
+    if (feedback) feedback.textContent = `${promotor} já está cadastrado em férias em ${formatarCompetenciaFerias(competencia)}.`;
+    return;
+  }
+
+  promotoresFeriasPorMes = normalizarFeriasPromotores({ ...promotoresFeriasPorMes, [competencia]: [...atuais, promotor] });
+  salvarStore(STORAGE_KEYS.promoterVacations, promotoresFeriasPorMes);
+  if (feedback) feedback.textContent = `Salvando férias e identificando as unidades de ${promotor}...`;
+  const vinculosInferidos = await inferirVinculosPromotorHistoricoAdmin(promotor, competencia);
+  const sincronizado = await salvarConfigNoFirebase();
+  if (feedback) feedback.textContent = `Recalculando ${formatarCompetenciaFerias(competencia)}...`;
+  const reprocessado = await reprocessarCompetenciaFerias(competencia);
+  aplicarRegrasAdministrativasNaBaseAtual();
+  renderFeriasPromotoresAdmin();
+  if (promotorInput) promotorInput.value = '';
+  if (feedback) feedback.textContent = `${promotor} foi retirado da contabilização de ${formatarCompetenciaFerias(competencia)}. ${reprocessado.processados} dia(s) recalculado(s)${vinculosInferidos ? ` • ${vinculosInferidos} unidade(s) identificada(s) automaticamente` : ''}${sincronizado || !firebaseDisponivel ? '.' : ' • sincronização online pendente.'}`;
+}
+
+async function removerFeriasPromotorAdmin(competencia, promotor) {
+  const feedback = document.getElementById('vacationFeedback');
+  const lista = (promotoresFeriasPorMes[competencia] || []).filter((nome) => slug(nome) !== slug(promotor));
+  const atualizado = { ...promotoresFeriasPorMes };
+  if (lista.length) atualizado[competencia] = lista;
+  else delete atualizado[competencia];
+  promotoresFeriasPorMes = normalizarFeriasPromotores(atualizado);
+  salvarStore(STORAGE_KEYS.promoterVacations, promotoresFeriasPorMes);
+  if (feedback) feedback.textContent = `Removendo férias e recalculando ${formatarCompetenciaFerias(competencia)}...`;
+  const sincronizado = await salvarConfigNoFirebase();
+  const reprocessado = await reprocessarCompetenciaFerias(competencia);
+  aplicarRegrasAdministrativasNaBaseAtual();
+  renderFeriasPromotoresAdmin();
+  if (feedback) feedback.textContent = `${promotor} voltou para a contabilização de ${formatarCompetenciaFerias(competencia)}. ${reprocessado.processados} dia(s) recalculado(s)${sincronizado || !firebaseDisponivel ? '.' : ' • sincronização online pendente.'}`;
+}
+
 function popularControlesAdmin() {
   const lojas = obterLojasConhecidas();
   const formadores = [...new Set([...Object.values(lojaFormadorMap), ...registrosBase.map((item) => item.formador)].filter(ehFormadorAtivo))].sort();
@@ -4298,6 +4660,7 @@ function popularControlesAdmin() {
   preencherSelect(document.getElementById('adminFormadorSelect'), formadores, 'Selecione o formador');
   renderTabelaRotinasAdmin();
   renderVinculosLista();
+  renderFeriasPromotoresAdmin();
   renderRenamesLista();
   renderTabelaRegionaisAdmin();
   renderTabelaUnidadesAdmin();
@@ -4665,6 +5028,7 @@ function configurarAdmin() {
     unidades: 'Unidades ativas',
     rotinas: 'Rotinas e tolerâncias',
     vinculos: 'Equipe e formadores',
+    ferias: 'Férias de promotores',
     nomes: 'Padronização de nomes',
     historico: 'Histórico de importações',
     configuracoes: 'Configurações do sistema'
@@ -4679,6 +5043,7 @@ function configurarAdmin() {
     if (tab === 'unidades') renderTabelaUnidadesAdmin();
     if (tab === 'historico') renderHistoricoPlanilhas();
     if (tab === 'rotinas') renderTabelaRotinasAdmin();
+    if (tab === 'ferias') renderFeriasPromotoresAdmin();
   }
 
   function refreshAdminView() {
@@ -4732,6 +5097,13 @@ function configurarAdmin() {
   });
 
   document.getElementById('saveLojaVinculo')?.addEventListener('click', salvarVinculoLoja);
+  document.getElementById('addVacationPromoter')?.addEventListener('click', salvarFeriasPromotorAdmin);
+  document.getElementById('vacationMonth')?.addEventListener('change', renderFeriasPromotoresAdmin);
+  document.getElementById('vacationList')?.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-vacation-remove]');
+    if (!button) return;
+    removerFeriasPromotorAdmin(button.dataset.vacationRemove, button.dataset.vacationPromoter);
+  });
   document.getElementById('saveLojaRename')?.addEventListener('click', salvarNovoNomeLoja);
   document.getElementById('saveRegionals')?.addEventListener('click', salvarRegionaisAdmin);
   document.getElementById('adminRegionalSearch')?.addEventListener('input', renderTabelaRegionaisAdmin);
@@ -4912,7 +5284,8 @@ function atualizarRotulosAbas() {
   }
 }
 
-function aplicarPeriodoResumo(periodo) {
+function aplicarPeriodoResumo(periodo, manterPainelAtrasos = false) {
+  if (!manterPainelAtrasos) painelAtrasosAberto = false;
   resumoPeriodoAtual = periodo;
   const periodoFiltro = normalizarPeriodo(filtros.dataInicial?.value, filtros.dataFinal?.value);
   const refFiltro = periodoFiltro.dataFinal
@@ -4939,14 +5312,14 @@ function aplicarPeriodoResumo(periodo) {
     filtros.dataInicial.value = fmt(ini);
     filtros.dataFinal.value = refReal;
   }
-  document.querySelectorAll('.summary-tab').forEach((button) => button.classList.toggle('active', button.dataset.period === periodo));
+  document.querySelectorAll('.summary-tab[data-period]').forEach((button) => button.classList.toggle('active', button.dataset.period === periodo));
   atualizarRotulosAbas();
   renderizarPainel();
 }
 
 function configurarAbasResumo() {
   atualizarRotulosAbas();
-  document.querySelectorAll('.summary-tab').forEach((button) => {
+  document.querySelectorAll('.summary-tab[data-period]').forEach((button) => {
     button.addEventListener('click', () => aplicarPeriodoResumo(button.dataset.period));
   });
 }
@@ -4964,7 +5337,7 @@ function configurarSidebar() {
 
 function ativarResumoMensalSemSobrescreverDatas() {
   resumoPeriodoAtual = 'mensal';
-  document.querySelectorAll('.summary-tab').forEach((button) => {
+  document.querySelectorAll('.summary-tab[data-period]').forEach((button) => {
     button.classList.toggle('active', button.dataset.period === 'mensal');
   });
 }
@@ -5036,6 +5409,8 @@ window.PainelSF = Object.assign(window.PainelSF || {}, {
     document.body.classList.remove('admin-mode');
   },
   aplicarPeriodoResumo,
+  abrirResumoAtrasos,
+  fecharResumoAtrasos,
   selecionarRegionalDashboard,
   abrirApresentacao,
   fecharApresentacao,
