@@ -139,6 +139,7 @@ const REGRAS_HISTORICAS_CHECKLIST = [
 const LOJAS_ATIVAS = [
   { codigo: '085', nome: 'ASSAÍ CESAMAR' },
   { codigo: '086', nome: 'ASSAÍ TEOTÔNIO' },
+  { codigo: '087', nome: 'COSTA TRINDADE' },
   { codigo: '049', nome: 'COMPER ASA SUL' },
   { codigo: '051', nome: 'COMPER GAMA' },
   { codigo: '052', nome: 'COMPER SOBRADINHO' },
@@ -213,7 +214,7 @@ const REGIONAIS = [
 ];
 const REGIONAIS_POR_ID = new Map(REGIONAIS.map((regional) => [regional.id, regional]));
 const CODIGOS_REGIONAL_GOIANIA_FORA = new Set([
-  '085', '086', '080', '083', '059', '081', '058', '084', '082', '079',
+  '085', '086', '087', '080', '083', '059', '081', '058', '084', '082', '079',
   '019', '015', '025', '020', '014', '034', '021', '026'
 ]);
 const defaultLojaRegionalMap = LOJAS_ATIVAS.reduce((acc, loja) => {
@@ -255,6 +256,7 @@ const CADASTRO_LOJAS_FORMADORES = [
   ['BRETAS ARMAZÉM', 'Karina'],
   ['COSTA GOIÂNIA', 'Karina'],
   ['COSTA LARANJEIRAS', 'Karina'],
+  ['COSTA TRINDADE', 'Karina'],
   ['DANIEL PEREIRA GOMES', 'Karina'],
   ['DD APARECIDA GOIÂNIA', 'Karina'],
   ['DD CESAR LATES', 'Karina'],
@@ -328,6 +330,7 @@ const ALIASES_LOJAS = {
   'DD JD BOTÂNICO': ['DD JD BOTANICO', 'DD JD. BOTANICO', 'DD JD BOTÃNICO', 'DIA A DIA JARDIM BOTANICO', 'DIA A DIA JARDIM BOTÂNICO'],
   'DD SIA': ['DIA A DIA SIA'],
   'COSTA T-63': ['COSTA T63', 'COSTA T 63'],
+  'COSTA TRINDADE': ['COSTA - TRINDADE', 'TRINDADE', 'COSTA TRINDADE 1003'],
   'COSTA JARDIM GOIÁS': ['COSTA JARDIM GOIAS', 'COSTA JD GOIAS', 'COSTA JD GOIÁS'],
   'COSTA SENADOR CANEDO': ['COSTA SENADOR CANÊDO'],
   'COSTA GOIÂNIA (ANEL VIÁRIO)': ['COSTA GOIANIA (ANEL VIARIO)', 'COSTA GOIANIA ANEL VIARIO', 'COSTA GOIÂNIA ANEL VIÁRIO', 'COSTA ANEL VIARIO', 'COSTA ANEL VIÁRIO'],
