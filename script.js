@@ -28,6 +28,7 @@ let aplicarEstadoRemotoTimer = null;
 let resumoPeriodoAtual = 'diario';
 let curvaPeriodoAtual = '30d';
 let painelAtrasosAberto = false;
+let painelSemPromotorAberto = false;
 
 const APRESENTACAO_CONFIG = {
   intervaloMs: 10000
@@ -45,6 +46,7 @@ const STORAGE_KEYS = {
   storeFormadorMap: 'sf_store_formador_map',
   storePromotorMap: 'sf_store_promotor_map',
   promoterVacations: 'sf_promoter_vacations',
+  storeAbsences: 'sf_store_absences',
   storeRegionalMap: 'sf_store_regional_map',
   regionalMapReviewed: 'sf_regional_map_reviewed',
   storeRenameMap: 'sf_store_rename_map',
@@ -62,6 +64,12 @@ const ADMIN_CREDENTIALS = {
 };
 
 const FORMADORES_ATIVOS = ['Luciano', 'Karina', 'Luana'];
+const MOTIVOS_AUSENCIA_LOJA = Object.freeze({
+  falta: 'Falta',
+  folga: 'Folga',
+  atestado: 'Atestado'
+});
+
 const FORMADORES_ATIVOS_SLUG = new Set(FORMADORES_ATIVOS.map((item) => slug(item)));
 const APP_STORAGE_VERSION = '2026-07-29-data-real-e-modo-leve-v12';
 const RESULT_SCHEMA_VERSION = 5;
@@ -445,6 +453,7 @@ migrarArmazenamentoSeNecessario();
 let lojaFormadorMap = sanitizarMapaFormadores({ ...defaultLojaFormadorMap, ...normalizarMapaChaves(carregarStore(STORAGE_KEYS.storeFormadorMap, {})) });
 let lojaPromotorMap = normalizarMapaChaves(carregarStore(STORAGE_KEYS.storePromotorMap, {}));
 let promotoresFeriasPorMes = normalizarFeriasPromotores(carregarStore(STORAGE_KEYS.promoterVacations, {}));
+let ausenciasLojas = normalizarAusenciasLojas(carregarStore(STORAGE_KEYS.storeAbsences, []));
 let lojaRegionalMap = sanitizarMapaRegionais({ ...defaultLojaRegionalMap, ...carregarStore(STORAGE_KEYS.storeRegionalMap, {}) });
 let regionalSelecionada = 'geral';
 let regionalMapRevisado = localStorage.getItem(STORAGE_KEYS.regionalMapReviewed) === '1';
@@ -712,6 +721,7 @@ async function salvarConfigNoFirebase() {
       storeFormadorMap: sanitizarMapaFormadores(lojaFormadorMap),
       storePromotorMap: lojaPromotorMap,
       promoterVacationMap: promotoresFeriasPorMes,
+      storeAbsenceMap: ausenciasLojas,
       storeRegionalMap: sanitizarMapaRegionais(lojaRegionalMap),
       regionalMapReviewed: regionalMapRevisado,
       storeRenameMap: lojaRenameMap,
@@ -1044,6 +1054,7 @@ function iniciarFirebaseSync() {
     });
     lojaPromotorMap = normalizarMapaChaves(remoto.storePromotorMap || lojaPromotorMap);
     promotoresFeriasPorMes = normalizarFeriasPromotores(remoto.promoterVacationMap || promotoresFeriasPorMes);
+    ausenciasLojas = normalizarAusenciasLojas(remoto.storeAbsenceMap || ausenciasLojas);
     lojaRegionalMap = sanitizarMapaRegionais({ ...defaultLojaRegionalMap, ...(remoto.storeRegionalMap || lojaRegionalMap) });
     if (typeof remoto.regionalMapReviewed === 'boolean') regionalMapRevisado = remoto.regionalMapReviewed;
     lojaRenameMap = normalizarMapaChaves({
@@ -1056,6 +1067,7 @@ function iniciarFirebaseSync() {
     salvarStore(STORAGE_KEYS.storeFormadorMap, lojaFormadorMap);
     salvarStore(STORAGE_KEYS.storePromotorMap, lojaPromotorMap);
     salvarStore(STORAGE_KEYS.promoterVacations, promotoresFeriasPorMes);
+    salvarStore(STORAGE_KEYS.storeAbsences, ausenciasLojas);
     salvarStore(STORAGE_KEYS.storeRegionalMap, lojaRegionalMap);
     localStorage.setItem(STORAGE_KEYS.regionalMapReviewed, regionalMapRevisado ? '1' : '0');
     salvarStore(STORAGE_KEYS.storeRenameMap, lojaRenameMap);
@@ -1596,6 +1608,79 @@ function resolverFormador(loja, formadorPlanilha = '', mapaPlanilha = new Map())
 }
 
 
+
+function normalizarAusenciasLojas(lista = []) {
+  if (!Array.isArray(lista)) return [];
+  const mapa = new Map();
+  lista.forEach((item, index) => {
+    const inicio = formatarData(item?.dataInicio || item?.inicio || item?.data || '');
+    let fim = formatarData(item?.dataFim || item?.fim || inicio) || inicio;
+    if (!inicio) return;
+    let dataInicio = inicio;
+    let dataFim = fim;
+    if (dataInicio > dataFim) [dataInicio, dataFim] = [dataFim, dataInicio];
+    const motivo = slug(item?.motivo || '');
+    if (!MOTIVOS_AUSENCIA_LOJA[motivo]) return;
+    const ativa = resolverLojaAtiva(item?.loja || '', item?.codigoUnidade || '');
+    const loja = ativa?.nome || renomearLojaSeNecessario(item?.loja || '');
+    if (!loja) return;
+    const codigoUnidade = ativa?.codigo || normalizarCodigoUnidade(item?.codigoUnidade || '');
+    const id = String(item?.id || `ausencia-${slug(loja)}-${dataInicio}-${dataFim}-${motivo}-${index + 1}`);
+    const chave = `${slug(loja)}|${dataInicio}|${dataFim}|${motivo}`;
+    if (mapa.has(chave)) return;
+    mapa.set(chave, {
+      id,
+      loja,
+      codigoUnidade,
+      motivo,
+      dataInicio,
+      dataFim,
+      createdAt: valorDataParaIso(item?.createdAt, new Date().toISOString())
+    });
+  });
+  return [...mapa.values()].sort((a, b) => b.dataInicio.localeCompare(a.dataInicio) || a.loja.localeCompare(b.loja, 'pt-BR'));
+}
+
+function obterAusenciaManualLojaNaData(loja = '', codigoUnidade = '', dataIso = '') {
+  const data = formatarData(dataIso);
+  const ativa = resolverLojaAtiva(loja, codigoUnidade);
+  const nome = ativa?.nome || renomearLojaSeNecessario(loja);
+  const chave = slug(nome);
+  if (!data || !chave) return null;
+  return ausenciasLojas.find((item) => slug(item.loja) === chave && data >= item.dataInicio && data <= item.dataFim) || null;
+}
+
+function lojaEstaAusenteManual(loja = '', codigoUnidade = '', dataIso = '') {
+  return Boolean(obterAusenciaManualLojaNaData(loja, codigoUnidade, dataIso));
+}
+
+function enumerarDatas(inicio = '', fim = '') {
+  const a = formatarData(inicio);
+  const b = formatarData(fim || inicio);
+  if (!a || !b) return [];
+  const primeiro = a <= b ? a : b;
+  const ultimo = a <= b ? b : a;
+  const datas = [];
+  const atual = dataIsoParaDate(primeiro);
+  const limite = dataIsoParaDate(ultimo);
+  if (!atual || !limite) return datas;
+  while (atual <= limite && datas.length < 800) {
+    datas.push(dataLocalParaIso(atual));
+    atual.setDate(atual.getDate() + 1);
+  }
+  return datas;
+}
+
+function lojaTemRotinaProgramadaNaData(loja, codigoUnidade, data) {
+  return configRotinas.some((rotina) => rotinaAplicaNaData(rotina, data) && rotinaAplicaNaLoja(rotina, loja, data, codigoUnidade));
+}
+
+function obterPromotorPrincipalDaLoja(loja = '', codigoUnidade = '') {
+  const ativa = resolverLojaAtiva(loja, codigoUnidade);
+  const nome = ativa?.nome || renomearLojaSeNecessario(loja);
+  return String(lojaPromotorMap[slug(nome)] || '').trim();
+}
+
 function normalizarCompetenciaFerias(valor = '') {
   const texto = String(valor || '').trim();
   return /^\d{4}-\d{2}$/.test(texto) ? texto : '';
@@ -1950,12 +2035,134 @@ function abrirResumoAtrasos() {
     return;
   }
   painelAtrasosAberto = true;
+  painelSemPromotorAberto = false;
   aplicarPeriodoResumo('diario', true);
   requestAnimationFrame(() => document.getElementById('rotinasForaHorarioDiario')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 }
 
 function fecharResumoAtrasos() {
   painelAtrasosAberto = false;
+  renderizarPainel();
+}
+
+
+function obterPeriodoResumoSemPromotor() {
+  const periodo = normalizarPeriodo(formatarData(filtros.dataInicial?.value), formatarData(filtros.dataFinal?.value));
+  const fallback = obterUltimaDataImportadaNoPeriodo(periodo.dataInicial, periodo.dataFinal)
+    || periodo.dataFinal || periodo.dataInicial || ultimaDataDisponivel || dataLocalIso();
+  return {
+    dataInicial: periodo.dataInicial || fallback,
+    dataFinal: periodo.dataFinal || fallback
+  };
+}
+
+function lojaPassaFiltrosAusencia(lojaAtiva) {
+  if (!lojaAtiva) return false;
+  const info = parseLoja(lojaAtiva.nome);
+  if (filtros.loja?.value && info.loja !== filtros.loja.value) return false;
+  if (filtros.rede?.value && info.rede !== filtros.rede.value) return false;
+  const formador = resolverFormador(info.loja);
+  if (filtros.formador?.value && formador !== filtros.formador.value) return false;
+  if (!registroPertenceRegional({ loja: info.loja, codigoUnidade: lojaAtiva.codigo })) return false;
+  return true;
+}
+
+function obterAusenciasVisiveisNoPeriodo() {
+  const periodo = obterPeriodoResumoSemPromotor();
+  const datas = enumerarDatas(periodo.dataInicial, periodo.dataFinal);
+  const saida = [];
+  const chaves = new Set();
+
+  datas.forEach((data) => {
+    LOJAS_ATIVAS.forEach((lojaAtiva) => {
+      if (!lojaPassaFiltrosAusencia(lojaAtiva)) return;
+      if (!lojaTemRotinaProgramadaNaData(lojaAtiva.nome, lojaAtiva.codigo, data)) return;
+
+      const manual = obterAusenciaManualLojaNaData(lojaAtiva.nome, lojaAtiva.codigo, data);
+      let motivo = manual ? MOTIVOS_AUSENCIA_LOJA[manual.motivo] : '';
+      let origem = manual ? 'manual' : '';
+      let promotor = '';
+
+      if (!manual) {
+        promotor = obterPromotorPrincipalDaLoja(lojaAtiva.nome, lojaAtiva.codigo);
+        if (promotor && promotorEstaDeFerias(promotor, data)) {
+          motivo = 'Férias';
+          origem = 'ferias';
+        }
+      }
+      if (!motivo) return;
+
+      const info = parseLoja(lojaAtiva.nome);
+      const realizados = registros.filter((item) => item.data === data && slug(item.loja) === slug(info.loja) && item.status === 'realizada').length;
+      const situacao = realizados > 0
+        ? `Cobertura registrada • ${realizados} rotina${realizados === 1 ? '' : 's'} executada${realizados === 1 ? '' : 's'}`
+        : 'Loja sem rotinas executadas no dia';
+      const desassistida = realizados === 0;
+      const chave = `${data}|${lojaAtiva.codigo}|${motivo}`;
+      if (chaves.has(chave)) return;
+      chaves.add(chave);
+      saida.push({
+        data,
+        loja: info.loja,
+        codigoUnidade: lojaAtiva.codigo,
+        motivo,
+        origem,
+        promotor,
+        situacao,
+        desassistida
+      });
+    });
+  });
+
+  return saida.sort((a, b) => b.data.localeCompare(a.data) || a.loja.localeCompare(b.loja, 'pt-BR'));
+}
+
+function atualizarAbaLojasSemPromotor() {
+  const tab = document.getElementById('summaryNoPromoterTab');
+  const label = document.getElementById('tabLabelSemPromotor');
+  if (!tab || !label) return;
+  const dados = obterAusenciasVisiveisNoPeriodo();
+  const lojasDesassistidas = new Set(dados.filter((item) => item.desassistida).map((item) => slug(item.loja))).size;
+  label.textContent = lojasDesassistidas
+    ? `${formatarNumero.format(lojasDesassistidas)} loja${lojasDesassistidas === 1 ? '' : 's'} desassistida${lojasDesassistidas === 1 ? '' : 's'}`
+    : 'Nenhuma loja desassistida';
+  tab.classList.toggle('has-absence', dados.length > 0);
+  tab.classList.toggle('active', painelSemPromotorAberto);
+}
+
+function renderLojasSemPromotor() {
+  const painel = document.getElementById('lojasSemPromotorPanel');
+  const thead = document.getElementById('lojasSemPromotorHead');
+  const tbody = document.getElementById('lojasSemPromotorTabela');
+  const resumo = document.getElementById('lojasSemPromotorResumo');
+  if (!painel || !thead || !tbody || !resumo) return;
+  painel.classList.toggle('hidden', !painelSemPromotorAberto);
+  if (!painelSemPromotorAberto) return;
+
+  const dados = obterAusenciasVisiveisNoPeriodo();
+  const periodo = obterPeriodoResumoSemPromotor();
+  const variasDatas = periodo.dataInicial !== periodo.dataFinal;
+  thead.innerHTML = `<tr>${variasDatas ? '<th>Data</th>' : ''}<th>Unidade</th><th>Motivo</th><th>Situação</th></tr>`;
+  const colspan = variasDatas ? 4 : 3;
+  tbody.innerHTML = dados.length
+    ? dados.map((item) => `<tr>${variasDatas ? `<td>${escaparHtml(item.data.split('-').reverse().join('/'))}</td>` : ''}<td>${escaparHtml(item.loja)}</td><td><span class="absence-reason-badge">${escaparHtml(item.motivo)}</span></td><td>${escaparHtml(item.situacao)}</td></tr>`).join('')
+    : `<tr><td colspan="${colspan}"><div class="empty-state">Nenhuma loja sem promotor no período selecionado.</div></td></tr>`;
+
+  const desassistidas = dados.filter((item) => item.desassistida);
+  const lojasUnicas = new Set(desassistidas.map((item) => slug(item.loja))).size;
+  const ocorrencias = desassistidas.length;
+  resumo.innerHTML = `<strong>Lojas desassistidas no período: ${formatarNumero.format(lojasUnicas)}</strong><span>Ocorrências de desassistência: ${formatarNumero.format(ocorrencias)}</span>`;
+}
+
+function abrirResumoSemPromotor() {
+  painelSemPromotorAberto = !painelSemPromotorAberto;
+  if (painelSemPromotorAberto) painelAtrasosAberto = false;
+  renderizarPainel();
+  if (painelSemPromotorAberto) requestAnimationFrame(() => document.getElementById('lojasSemPromotorPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+}
+
+function fecharResumoSemPromotor() {
+  painelSemPromotorAberto = false;
   renderizarPainel();
 }
 
@@ -2842,7 +3049,9 @@ function renderizarPainel() {
   dadosFiltrados = obterDadosFiltrados();
   atualizarKPIs(dadosFiltrados);
   atualizarAbaRotinasEmAtraso();
+  atualizarAbaLojasSemPromotor();
   renderRotinasForaHorarioDiario();
+  renderLojasSemPromotor();
   renderRankingFormadores(dadosFiltrados);
   renderPromotorDestaque(dadosFiltrados);
   renderRankingsPorFormador(dadosFiltrados);
@@ -3277,6 +3486,8 @@ function gerarResultadosBaseParaData(data, respostasInformadas = []) {
   rotinasDoDia.forEach((rotina) => {
     lojas.forEach((loja) => {
       if (!rotinaAplicaNaLoja(rotina, loja, data)) return;
+      const lojaAtivaAusencia = resolverLojaAtiva(loja);
+      if (lojaEstaAusenteManual(loja, lojaAtivaAusencia?.codigo || '', data)) return;
       const resposta = mapaRespostas.get(chaveResposta(data, loja, rotina.id));
       const status = resposta ? 'realizada' : 'pendente';
       const rotinaPontualidade = obterRegraPontualidadeResposta(rotina, resposta?.checklist || resposta?.checklistOriginal || '');
@@ -4655,6 +4866,154 @@ async function removerFeriasPromotorAdmin(competencia, promotor) {
   if (feedback) feedback.textContent = `${promotor} voltou para a contabilização de ${formatarCompetenciaFerias(competencia)}. ${reprocessado.processados} dia(s) recalculado(s)${sincronizado || !firebaseDisponivel ? '.' : ' • sincronização online pendente.'}`;
 }
 
+
+function obterDataAusenciaPadrao() {
+  return formatarData(filtros.dataFinal?.value) || ultimaDataDisponivel || dataLocalIso();
+}
+
+function formatarIntervaloAusencia(inicio, fim) {
+  const a = formatarData(inicio);
+  const b = formatarData(fim || inicio);
+  if (!a) return '';
+  const fa = a.split('-').reverse().join('/');
+  const fb = b ? b.split('-').reverse().join('/') : fa;
+  return a === b ? fa : `${fa} a ${fb}`;
+}
+
+function renderAusenciasLojasAdmin() {
+  const lojaSelect = document.getElementById('absenceStore');
+  const inicio = document.getElementById('absenceStartDate');
+  const fim = document.getElementById('absenceEndDate');
+  const lista = document.getElementById('absenceList');
+  if (lojaSelect && !lojaSelect.options.length) preencherSelect(lojaSelect, LOJAS_ATIVAS.map((item) => item.nome), 'Selecione a loja');
+  if (inicio && !inicio.value) inicio.value = obterDataAusenciaPadrao();
+  if (fim && !fim.value) fim.value = inicio?.value || obterDataAusenciaPadrao();
+  if (!lista) return;
+
+  if (!ausenciasLojas.length) {
+    lista.innerHTML = '<div class="empty-state">Nenhuma ausência de loja cadastrada.</div>';
+    return;
+  }
+  lista.innerHTML = ausenciasLojas.map((item) => `<div class="absence-row"><div><strong>${escaparHtml(item.loja)}</strong><span>${escaparHtml(MOTIVOS_AUSENCIA_LOJA[item.motivo] || item.motivo)} • ${escaparHtml(formatarIntervaloAusencia(item.dataInicio, item.dataFim))}</span></div><button class="btn btn-secondary btn-compact" type="button" data-absence-remove="${escaparHtml(item.id)}">Remover</button></div>`).join('');
+}
+
+async function reprocessarIntervaloAusencias(dataInicio, dataFim) {
+  const inicio = formatarData(dataInicio);
+  const fim = formatarData(dataFim || dataInicio);
+  if (!inicio || !fim) return { processados: 0, online: false };
+  const periodo = normalizarPeriodo(inicio, fim);
+  let metas = obterHistoricoLeve().filter((item) => item.latestDate >= periodo.dataInicial && item.latestDate <= periodo.dataFinal);
+  let online = false;
+
+  if (firebaseDisponivel && firebaseApi && snapshotsCollectionRef) {
+    try {
+      const consulta = firebaseApi.query(
+        snapshotsCollectionRef,
+        firebaseApi.where('latestDate', '>=', periodo.dataInicial),
+        firebaseApi.where('latestDate', '<=', periodo.dataFinal),
+        firebaseApi.orderBy('latestDate', 'asc'),
+        firebaseApi.limit(400)
+      );
+      const resultado = await firebaseApi.getDocs(consulta);
+      metas = resultado.docs.map((docItem) => normalizarSnapshotFirebase({ id: docItem.id, ...docItem.data() })).filter(Boolean);
+      online = true;
+    } catch (error) {
+      console.error('Erro ao buscar período para recalcular ausências:', error);
+    }
+  }
+
+  let processados = 0;
+  for (const meta of metas) {
+    const data = formatarData(meta.latestDate);
+    if (!data) continue;
+    let dados = [];
+    const carregado = snapshotsImportados.find((item) => item.id === meta.id && Array.isArray(item.data));
+    if (carregado) dados = carregado.data;
+    else if (online) {
+      try { dados = await carregarDadosSnapshotNoFirebase(meta); } catch (error) { console.error(`Erro ao carregar ${meta.id} para ausências:`, error); }
+    }
+    if (!Array.isArray(dados) || !dados.length) continue;
+    const respostas = dados.map(normalizarRespostaPersistida).filter(Boolean);
+    const gerado = gerarResultadosBaseParaData(data, respostas);
+    const summary = resumirResultadosImportacao(gerado.resultados);
+    atualizarResumoLocalFerias(meta.id, data, summary, gerado.resultados.length);
+    if (online) {
+      try {
+        await firebaseApi.setDoc(firebaseApi.doc(db, 'painel_snapshots', meta.id), {
+          summary,
+          total: gerado.resultados.length,
+          absenceRecalculatedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (error) {
+        console.error(`Erro ao salvar resumo recalculado ${meta.id}:`, error);
+      }
+    }
+    processados += 1;
+  }
+  persistirResumosLocais();
+  persistirSnapshotsLocais();
+  invalidarCacheDados();
+  return { processados, online };
+}
+
+async function salvarAusenciaLojaAdmin() {
+  const lojaSelect = document.getElementById('absenceStore');
+  const motivoSelect = document.getElementById('absenceReason');
+  const inicioInput = document.getElementById('absenceStartDate');
+  const fimInput = document.getElementById('absenceEndDate');
+  const feedback = document.getElementById('absenceFeedback');
+  const lojaNome = String(lojaSelect?.value || '').trim();
+  const ativa = resolverLojaAtiva(lojaNome);
+  const motivo = slug(motivoSelect?.value || '');
+  let dataInicio = formatarData(inicioInput?.value);
+  let dataFim = formatarData(fimInput?.value || inicioInput?.value);
+  if (!ativa || !MOTIVOS_AUSENCIA_LOJA[motivo] || !dataInicio || !dataFim) {
+    if (feedback) feedback.textContent = 'Selecione a loja, o motivo e informe as datas da ausência.';
+    return;
+  }
+  if (dataInicio > dataFim) [dataInicio, dataFim] = [dataFim, dataInicio];
+
+  const duplicada = ausenciasLojas.some((item) => slug(item.loja) === slug(ativa.nome) && item.motivo === motivo && item.dataInicio === dataInicio && item.dataFim === dataFim);
+  if (duplicada) {
+    if (feedback) feedback.textContent = 'Essa ausência já está cadastrada para a loja e período informados.';
+    return;
+  }
+
+  const novo = {
+    id: `ausencia-${Date.now()}-${slug(ativa.nome)}`,
+    loja: ativa.nome,
+    codigoUnidade: ativa.codigo,
+    motivo,
+    dataInicio,
+    dataFim,
+    createdAt: new Date().toISOString()
+  };
+  ausenciasLojas = normalizarAusenciasLojas([...ausenciasLojas, novo]);
+  salvarStore(STORAGE_KEYS.storeAbsences, ausenciasLojas);
+  if (feedback) feedback.textContent = 'Salvando ausência...';
+  const sincronizado = await salvarConfigNoFirebase();
+  if (feedback) feedback.textContent = 'Recalculando o período informado...';
+  const reprocessado = await reprocessarIntervaloAusencias(dataInicio, dataFim);
+  aplicarRegrasAdministrativasNaBaseAtual();
+  renderAusenciasLojasAdmin();
+  if (feedback) feedback.textContent = `${ativa.nome} foi retirada da contabilização por ${MOTIVOS_AUSENCIA_LOJA[motivo]} em ${formatarIntervaloAusencia(dataInicio, dataFim)}. ${reprocessado.processados} dia(s) recalculado(s)${sincronizado || !firebaseDisponivel ? '.' : ' • sincronização online pendente.'}`;
+}
+
+async function removerAusenciaLojaAdmin(id) {
+  const feedback = document.getElementById('absenceFeedback');
+  const registro = ausenciasLojas.find((item) => item.id === id);
+  if (!registro) return;
+  ausenciasLojas = ausenciasLojas.filter((item) => item.id !== id);
+  salvarStore(STORAGE_KEYS.storeAbsences, ausenciasLojas);
+  if (feedback) feedback.textContent = 'Removendo ausência e recalculando o período...';
+  const sincronizado = await salvarConfigNoFirebase();
+  const reprocessado = await reprocessarIntervaloAusencias(registro.dataInicio, registro.dataFim);
+  aplicarRegrasAdministrativasNaBaseAtual();
+  renderAusenciasLojasAdmin();
+  if (feedback) feedback.textContent = `${registro.loja} voltou para a contabilização em ${formatarIntervaloAusencia(registro.dataInicio, registro.dataFim)}. ${reprocessado.processados} dia(s) recalculado(s)${sincronizado || !firebaseDisponivel ? '.' : ' • sincronização online pendente.'}`;
+}
+
 function popularControlesAdmin() {
   const lojas = obterLojasConhecidas();
   const formadores = [...new Set([...Object.values(lojaFormadorMap), ...registrosBase.map((item) => item.formador)].filter(ehFormadorAtivo))].sort();
@@ -4664,6 +5023,7 @@ function popularControlesAdmin() {
   renderTabelaRotinasAdmin();
   renderVinculosLista();
   renderFeriasPromotoresAdmin();
+  renderAusenciasLojasAdmin();
   renderRenamesLista();
   renderTabelaRegionaisAdmin();
   renderTabelaUnidadesAdmin();
@@ -5031,7 +5391,7 @@ function configurarAdmin() {
     unidades: 'Unidades ativas',
     rotinas: 'Rotinas e tolerâncias',
     vinculos: 'Equipe e formadores',
-    ferias: 'Férias de promotores',
+    ferias: 'Férias e ausências',
     nomes: 'Padronização de nomes',
     historico: 'Histórico de importações',
     configuracoes: 'Configurações do sistema'
@@ -5046,7 +5406,7 @@ function configurarAdmin() {
     if (tab === 'unidades') renderTabelaUnidadesAdmin();
     if (tab === 'historico') renderHistoricoPlanilhas();
     if (tab === 'rotinas') renderTabelaRotinasAdmin();
-    if (tab === 'ferias') renderFeriasPromotoresAdmin();
+    if (tab === 'ferias') { renderFeriasPromotoresAdmin(); renderAusenciasLojasAdmin(); }
   }
 
   function refreshAdminView() {
@@ -5106,6 +5466,16 @@ function configurarAdmin() {
     const button = event.target.closest('button[data-vacation-remove]');
     if (!button) return;
     removerFeriasPromotorAdmin(button.dataset.vacationRemove, button.dataset.vacationPromoter);
+  });
+  document.getElementById('addStoreAbsence')?.addEventListener('click', salvarAusenciaLojaAdmin);
+  document.getElementById('absenceStartDate')?.addEventListener('change', (event) => {
+    const fim = document.getElementById('absenceEndDate');
+    if (fim && (!fim.value || fim.value < event.target.value)) fim.value = event.target.value;
+  });
+  document.getElementById('absenceList')?.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-absence-remove]');
+    if (!button) return;
+    removerAusenciaLojaAdmin(button.dataset.absenceRemove);
   });
   document.getElementById('saveLojaRename')?.addEventListener('click', salvarNovoNomeLoja);
   document.getElementById('saveRegionals')?.addEventListener('click', salvarRegionaisAdmin);
@@ -5289,6 +5659,7 @@ function atualizarRotulosAbas() {
 
 function aplicarPeriodoResumo(periodo, manterPainelAtrasos = false) {
   if (!manterPainelAtrasos) painelAtrasosAberto = false;
+  painelSemPromotorAberto = false;
   resumoPeriodoAtual = periodo;
   const periodoFiltro = normalizarPeriodo(filtros.dataInicial?.value, filtros.dataFinal?.value);
   const refFiltro = periodoFiltro.dataFinal
@@ -5414,6 +5785,8 @@ window.PainelSF = Object.assign(window.PainelSF || {}, {
   aplicarPeriodoResumo,
   abrirResumoAtrasos,
   fecharResumoAtrasos,
+  abrirResumoSemPromotor,
+  fecharResumoSemPromotor,
   selecionarRegionalDashboard,
   abrirApresentacao,
   fecharApresentacao,

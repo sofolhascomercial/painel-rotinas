@@ -106,12 +106,19 @@
 
       
       <section class="summary-tabs-shell summary-highlight-shell" aria-label="Acessos rápidos">
-        <div class="summary-tabs summary-tabs-single">
+        <div class="summary-tabs summary-tabs-quick">
           <button id="summaryLateTab" class="summary-tab summary-tab-alert" type="button" onclick="window.PainelSF && window.PainelSF.abrirResumoAtrasos()">
             <span class="summary-tab-icon">⏰</span>
             <span class="summary-tab-copy">
               <strong>Rotinas em atraso</strong>
               <small id="tabLabelAtrasos">Sem atrasos no dia</small>
+            </span>
+          </button>
+          <button id="summaryNoPromoterTab" class="summary-tab summary-tab-absence" type="button" onclick="window.PainelSF && window.PainelSF.abrirResumoSemPromotor()">
+            <span class="summary-tab-icon">👤</span>
+            <span class="summary-tab-copy">
+              <strong>Lojas sem promotor</strong>
+              <small id="tabLabelSemPromotor">Nenhuma loja desassistida</small>
             </span>
           </button>
         </div>
@@ -165,6 +172,24 @@
             <tbody id="rotinasForaHorarioTabela"></tbody>
           </table>
         </div>
+      </section>
+
+      <section class="panel hidden no-promoter-panel" id="lojasSemPromotorPanel" aria-labelledby="lojasSemPromotorTitle">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Cobertura de loja</span>
+            <h2 id="lojasSemPromotorTitle">Lojas sem promotor</h2>
+            <p class="no-promoter-helper">Férias, faltas, folgas e atestados cadastrados no ADM para o período selecionado.</p>
+          </div>
+          <button id="closeNoPromoterPanel" class="btn btn-secondary btn-compact" type="button" onclick="window.PainelSF && window.PainelSF.fecharResumoSemPromotor()">Fechar</button>
+        </div>
+        <div class="table-shell">
+          <table>
+            <thead id="lojasSemPromotorHead"></thead>
+            <tbody id="lojasSemPromotorTabela"></tbody>
+          </table>
+        </div>
+        <div id="lojasSemPromotorResumo" class="no-promoter-summary"></div>
       </section>
 
       <section class="regional-tabs-shell" aria-label="Seleção de regional">
@@ -477,7 +502,7 @@
             <button class="admin-tab" data-tab="unidades" type="button"><span>▤</span><div><strong>Unidades</strong><small>Cadastro operacional</small></div></button>
             <button class="admin-tab" data-tab="rotinas" type="button"><span>✓</span><div><strong>Rotinas</strong><small>Horários e tolerâncias</small></div></button>
             <button class="admin-tab" data-tab="vinculos" type="button"><span>♙</span><div><strong>Equipe</strong><small>Formadores por loja</small></div></button>
-            <button class="admin-tab" data-tab="ferias" type="button"><span>☀</span><div><strong>Férias</strong><small>Promotores por mês</small></div></button>
+            <button class="admin-tab" data-tab="ferias" type="button"><span>☀</span><div><strong>Férias / Ausências</strong><small>Promotores e lojas</small></div></button>
             <button class="admin-tab" data-tab="nomes" type="button"><span>✎</span><div><strong>Nomes</strong><small>Padronização das lojas</small></div></button>
             <button class="admin-tab" data-tab="historico" type="button"><span>◷</span><div><strong>Histórico</strong><small>Importações processadas</small></div></button>
             <button class="admin-tab" data-tab="configuracoes" type="button"><span>⚙</span><div><strong>Configurações</strong><small>Sistema e armazenamento</small></div></button>
@@ -669,6 +694,28 @@
                 <article class="admin-block vacation-list-card">
                   <div class="section-head compact-head"><div><span class="eyebrow">Férias cadastradas</span><h3>Promotores fora da contabilização</h3><p class="admin-summary">Os registros permanecem salvos por competência mensal e podem ser removidos a qualquer momento.</p></div></div>
                   <div id="vacationList" class="admin-scroll-list vacation-list"></div>
+                </article>
+              </div>
+
+              <div class="admin-grid two-cols absence-admin-grid">
+                <article class="admin-block absence-config-card">
+                  <span class="eyebrow">Ausência por loja</span>
+                  <h3>Folga, falta ou atestado</h3>
+                  <p class="admin-summary">A loja cadastrada fica fora das rotinas previstas e pendências durante o intervalo informado. Use a data final para atestados ou ausências com mais de um dia.</p>
+                  <div class="stack-fields absence-fields">
+                    <label class="field"><span>Loja</span><select id="absenceStore"></select></label>
+                    <label class="field"><span>Motivo</span><select id="absenceReason"><option value="falta">Falta</option><option value="folga">Folga</option><option value="atestado">Atestado</option></select></label>
+                    <div class="absence-date-grid">
+                      <label class="field"><span>Data inicial</span><input id="absenceStartDate" type="date" /></label>
+                      <label class="field"><span>Data final</span><input id="absenceEndDate" type="date" /></label>
+                    </div>
+                    <button id="addStoreAbsence" class="btn btn-primary" type="button">Adicionar ausência</button>
+                  </div>
+                  <div id="absenceFeedback" class="admin-feedback"></div>
+                </article>
+                <article class="admin-block absence-list-card">
+                  <div class="section-head compact-head"><div><span class="eyebrow">Ausências cadastradas</span><h3>Lojas fora da contabilização</h3><p class="admin-summary">Cada registro informa a loja, o motivo e o intervalo de ausência.</p></div></div>
+                  <div id="absenceList" class="admin-scroll-list absence-list"></div>
                 </article>
               </div>
             </section>
