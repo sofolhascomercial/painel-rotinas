@@ -1914,14 +1914,33 @@ function atualizarKPIs(dados) {
   const pendentes = dados.filter((item) => item.status === 'pendente').length;
   const execucao = percentual(realizadas, previstas);
 
+  const realizadasComHorario = dados.filter((item) => item.status === 'realizada' && ['no_prazo', 'tolerancia_inicio', 'tolerancia_fim', 'atrasada', 'antes_horario'].includes(item.pontualidade));
+  const dentroHorario = realizadasComHorario.filter((item) => ['no_prazo', 'tolerancia_inicio', 'tolerancia_fim'].includes(item.pontualidade)).length;
+  const foraHorario = realizadasComHorario.filter((item) => ['atrasada', 'antes_horario'].includes(item.pontualidade)).length;
+  const totalComHorario = dentroHorario + foraHorario;
+  const pctDentroHorario = totalComHorario ? Math.round((dentroHorario / totalComHorario) * 100) : null;
+  const pctForaHorario = totalComHorario ? Math.round((foraHorario / totalComHorario) * 100) : null;
+
   const kpiPrevistas = document.getElementById('kpiPrevistas');
   const kpiHoje = document.getElementById('kpiHoje');
   const kpiExecucao = document.getElementById('kpiExecucao');
   const kpiPendentes = document.getElementById('kpiPendentes');
+  const kpiDentroHorario = document.getElementById('kpiDentroHorario');
+  const kpiForaHorario = document.getElementById('kpiForaHorario');
+  const kpiDentroHorarioDetalhe = document.getElementById('kpiDentroHorarioDetalhe');
+  const kpiForaHorarioDetalhe = document.getElementById('kpiForaHorarioDetalhe');
   if (kpiPrevistas) kpiPrevistas.textContent = formatarNumero.format(previstas);
   if (kpiHoje) kpiHoje.textContent = formatarNumero.format(realizadas);
   if (kpiExecucao) kpiExecucao.textContent = `${execucao}%`;
   if (kpiPendentes) kpiPendentes.textContent = formatarNumero.format(pendentes);
+  if (kpiDentroHorario) kpiDentroHorario.textContent = pctDentroHorario === null ? '—' : `${pctDentroHorario}%`;
+  if (kpiForaHorario) kpiForaHorario.textContent = pctForaHorario === null ? '—' : `${pctForaHorario}%`;
+  if (kpiDentroHorarioDetalhe) kpiDentroHorarioDetalhe.textContent = totalComHorario
+    ? `${formatarNumero.format(dentroHorario)} de ${formatarNumero.format(totalComHorario)} realizadas com horário`
+    : 'Sem rotinas com horário no recorte';
+  if (kpiForaHorarioDetalhe) kpiForaHorarioDetalhe.textContent = totalComHorario
+    ? `${formatarNumero.format(foraHorario)} de ${formatarNumero.format(totalComHorario)} realizadas com horário`
+    : 'Sem rotinas com horário no recorte';
 
   const executionRing = document.getElementById('executionRing');
   if (executionRing) executionRing.style.setProperty('--progress', String(Math.max(0, Math.min(execucao, 100))));

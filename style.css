@@ -1084,6 +1084,31 @@ tbody tr:hover { background: rgba(34,197,94,0.08); }
 .execution-value { font-size: clamp(3.5rem, 6vw, 5rem); font-weight: 800; line-height: 1; letter-spacing: -0.08em; }
 .execution-delta { margin-top: 10px; font-size: 1.2rem; font-weight: 800; color: #facc15; }
 .execution-subtext { color: #d4d4d8; font-size: 0.95rem; max-width: 180px; line-height: 1.35; }
+.timing-kpi-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 8px;
+}
+.timing-kpi-card {
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.035);
+  display: grid;
+  gap: 5px;
+  text-align: left;
+}
+.timing-kpi-card.on-time { border-color: rgba(34,197,94,0.20); background: rgba(34,197,94,0.055); }
+.timing-kpi-card.out-time { border-color: rgba(245,158,11,0.22); background: rgba(245,158,11,0.055); }
+.timing-kpi-label { color: #d4d4d8; font-size: 0.82rem; font-weight: 750; letter-spacing: 0.04em; text-transform: uppercase; }
+.timing-kpi-card strong { font-size: clamp(1.7rem, 3vw, 2.25rem); line-height: 1; letter-spacing: -0.04em; }
+.timing-kpi-card.on-time strong { color: #4ade80; }
+.timing-kpi-card.out-time strong { color: #fbbf24; }
+.timing-kpi-card small { color: var(--muted); line-height: 1.35; font-size: 0.76rem; }
+
 .execution-meta-line {
   width: 100%;
   height: 1px;
@@ -1143,6 +1168,7 @@ tbody tr:hover { background: rgba(34,197,94,0.08); }
 @media (max-width: 760px) {
   .model-icon-btn, .model-lock-btn { height: 56px; }
   .execution-ring { width: 260px; height: 260px; }
+  .timing-kpi-row { grid-template-columns: 1fr; }
   .goal-foot { flex-direction: column; align-items:flex-start; }
 }
 
