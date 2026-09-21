@@ -80,6 +80,7 @@ const LIMITE_DIAS_DETALHES_INICIAIS = 7;
 const LIMITE_RESUMOS_HISTORICOS = 740;
 const LIMITE_DIAS_CONSULTA_DETALHADA = 90;
 const JANELA_AGRUPAMENTO_IMPORTACAO_LEGADA_MS = 5 * 60 * 1000;
+const AJUSTE_FUSO_EXPORTACAO_MOKI_HORAS = -3;
 
 const MESES_ARQUIVO = [
   { numero: '01', nomes: ['janeiro', 'jan'] },
@@ -1401,36 +1402,59 @@ function formatarEscopoRotina(escopo) {
   return escopo === '12x36' ? 'Somente lojas 12x36' : 'Todas as lojas';
 }
 
-function parseDataHoraMoki(valor, dataReferencia = '') {
-  if (!valor) return { data: formatarData(dataReferencia), hora: '', dataHoraIso: '' };
+function ajustarFusoDataHoraMoki(dataHora = {}, horas = AJUSTE_FUSO_EXPORTACAO_MOKI_HORAS) {
+  const data = formatarData(dataHora?.data);
+  const hora = validarHorario(dataHora?.hora);
+  if (!data || !hora || !Number.isFinite(Number(horas)) || Number(horas) === 0) return dataHora;
 
-  if (typeof valor === 'number') {
+  const segundosMatch = String(dataHora?.dataHoraIso || '').match(/T\d{2}:\d{2}:(\d{2})/);
+  const segundos = segundosMatch ? Number(segundosMatch[1]) : 0;
+  const [ano, mes, dia] = data.split('-').map(Number);
+  const [h, m] = hora.split(':').map(Number);
+  const instante = new Date(Date.UTC(ano, mes - 1, dia, h + Number(horas), m, segundos));
+  const dataCorrigida = instante.toISOString().slice(0, 10);
+  const horaCorrigida = `${String(instante.getUTCHours()).padStart(2, '0')}:${String(instante.getUTCMinutes()).padStart(2, '0')}`;
+  const segundosCorrigidos = String(instante.getUTCSeconds()).padStart(2, '0');
+  return {
+    ...dataHora,
+    data: dataCorrigida,
+    hora: horaCorrigida,
+    dataHoraIso: `${dataCorrigida}T${horaCorrigida}:${segundosCorrigidos}`
+  };
+}
+
+function parseDataHoraMoki(valor, dataReferencia = '', corrigirFusoExportacao = false) {
+  let resultado;
+  if (!valor) resultado = { data: formatarData(dataReferencia), hora: '', dataHoraIso: '' };
+  else if (typeof valor === 'number') {
     const excelEpoch = new Date(Date.UTC(1899, 11, 30));
     const data = new Date(excelEpoch.getTime() + valor * 86400000);
     const dataIso = data.toISOString().slice(0, 10);
     const hora = `${String(data.getUTCHours()).padStart(2, '0')}:${String(data.getUTCMinutes()).padStart(2, '0')}`;
-    return { data: dataIso, hora, dataHoraIso: `${dataIso}T${hora}:00` };
-  }
-
-  if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+    const segundos = String(data.getUTCSeconds()).padStart(2, '0');
+    resultado = { data: dataIso, hora, dataHoraIso: `${dataIso}T${hora}:${segundos}` };
+  } else if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
     const dataIso = `${valor.getFullYear()}-${String(valor.getMonth() + 1).padStart(2, '0')}-${String(valor.getDate()).padStart(2, '0')}`;
     const hora = `${String(valor.getHours()).padStart(2, '0')}:${String(valor.getMinutes()).padStart(2, '0')}`;
-    return { data: dataIso, hora, dataHoraIso: `${dataIso}T${hora}:00` };
+    const segundos = String(valor.getSeconds()).padStart(2, '0');
+    resultado = { data: dataIso, hora, dataHoraIso: `${dataIso}T${hora}:${segundos}` };
+  } else {
+    const texto = String(valor).trim();
+    const br = texto.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (br) {
+      const ano = br[3].length === 2 ? `20${br[3]}` : br[3];
+      const data = `${ano.padStart(4, '0')}-${br[2].padStart(2, '0')}-${br[1].padStart(2, '0')}`;
+      const hora = br[4] !== undefined ? `${String(br[4]).padStart(2, '0')}:${String(br[5]).padStart(2, '0')}` : '';
+      resultado = { data, hora, dataHoraIso: hora ? `${data}T${hora}:${String(br[6] || '00').padStart(2, '0')}` : '' };
+    } else {
+      const data = formatarData(dataReferencia || texto);
+      const horaMatch = texto.match(/(?:T|\s)(\d{1,2}):(\d{2})/);
+      const hora = horaMatch ? `${horaMatch[1].padStart(2, '0')}:${horaMatch[2]}` : '';
+      resultado = { data, hora, dataHoraIso: data && hora ? `${data}T${hora}:00` : '' };
+    }
   }
 
-  const texto = String(valor).trim();
-  const br = texto.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
-  if (br) {
-    const ano = br[3].length === 2 ? `20${br[3]}` : br[3];
-    const data = `${ano.padStart(4, '0')}-${br[2].padStart(2, '0')}-${br[1].padStart(2, '0')}`;
-    const hora = br[4] !== undefined ? `${String(br[4]).padStart(2, '0')}:${String(br[5]).padStart(2, '0')}` : '';
-    return { data, hora, dataHoraIso: hora ? `${data}T${hora}:${String(br[6] || '00').padStart(2, '0')}` : '' };
-  }
-
-  const data = formatarData(dataReferencia || texto);
-  const horaMatch = texto.match(/(?:T|\s)(\d{1,2}):(\d{2})/);
-  const hora = horaMatch ? `${horaMatch[1].padStart(2, '0')}:${horaMatch[2]}` : '';
-  return { data, hora, dataHoraIso: data && hora ? `${data}T${hora}:00` : '' };
+  return corrigirFusoExportacao ? ajustarFusoDataHoraMoki(resultado) : resultado;
 }
 
 function classificarPontualidade(rotina, horaRealizada, status = 'realizada') {
@@ -3269,7 +3293,8 @@ function extrairRespostasMoki(sheets) {
     );
     const idMoki = idxId >= 0 ? String(linha[idxId] || '').trim() : '';
     const statusMoki = idxStatus >= 0 ? String(linha[idxStatus] || '').trim() : 'Encerrado';
-    const dataHora = parseDataHoraMoki(dataRealizacaoOriginal, dataReferenciaOriginal);
+    const corrigirFusoExportacao = idxDataResposta >= 0 && idxDataRealizacao === idxDataResposta;
+    const dataHora = parseDataHoraMoki(dataRealizacaoOriginal, dataReferenciaOriginal, corrigirFusoExportacao);
     const dataReferencia = formatarData(dataReferenciaOriginal) || dataHora.data;
     const lojaAtiva = resolverLojaAtiva(lojaOriginal, codigoUnidade);
     const loja = lojaAtiva?.nome || renomearLojaSeNecessario(lojaOriginal);
@@ -3289,6 +3314,7 @@ function extrairRespostasMoki(sheets) {
       statusMoki,
       dataHoraRealizada: dataHora.dataHoraIso,
       horaRealizada: dataHora.hora,
+      fusoMokiCorrigido: corrigirFusoExportacao,
       autor
     };
     rawData.push(raw);
@@ -3423,8 +3449,14 @@ function normalizarRespostaPersistida(item = {}) {
   if (statusInformado && normalizarStatus(statusInformado) !== 'realizada') return null;
 
   const horaMatch = String(item.dataHoraRealizada || '').match(/T(\d{2}:\d{2})/);
-  const horaRealizada = validarHorario(item.horaRealizada) || validarHorario(horaMatch?.[1]);
-  if (!horaRealizada) return null;
+  const horaOriginal = validarHorario(item.horaRealizada) || validarHorario(horaMatch?.[1]);
+  if (!horaOriginal) return null;
+
+  const dataHoraOriginal = item.dataHoraRealizada || `${data}T${horaOriginal}:00`;
+  const precisaCorrigirLegado = item.fusoMokiCorrigido !== true;
+  const horarioNormalizado = precisaCorrigirLegado
+    ? ajustarFusoDataHoraMoki({ data, hora: horaOriginal, dataHoraIso: dataHoraOriginal })
+    : { data, hora: horaOriginal, dataHoraIso: dataHoraOriginal };
 
   return {
     data,
@@ -3433,8 +3465,9 @@ function normalizarRespostaPersistida(item = {}) {
     codigoUnidade: lojaAtiva.codigo,
     rotina: rotina.nome,
     rotinaId: rotina.id,
-    dataHoraRealizada: item.dataHoraRealizada || `${data}T${horaRealizada}:00`,
-    horaRealizada,
+    dataHoraRealizada: horarioNormalizado.dataHoraIso || `${data}T${horarioNormalizado.hora}:00`,
+    horaRealizada: horarioNormalizado.hora,
+    fusoMokiCorrigido: true,
     autor: item.autor || item.promotor || '',
     promotor: item.promotor || item.autor || ''
   };
@@ -3548,6 +3581,7 @@ function compactarRespostaParaPersistencia(resposta = {}) {
     checklist: resposta.checklist || resposta.checklistOriginal || '',
     horaRealizada: resposta.horaRealizada,
     dataHoraRealizada: resposta.dataHoraRealizada || '',
+    fusoMokiCorrigido: resposta.fusoMokiCorrigido === true,
     autor: resposta.autor || '',
     promotor: resposta.promotor || resposta.autor || ''
   };
